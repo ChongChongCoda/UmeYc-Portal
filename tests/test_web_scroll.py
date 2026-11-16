@@ -18,10 +18,13 @@ class WebScrollTests(unittest.IsolatedAsyncioTestCase):
 
         self.connect = patch.object(self.scroller, "_connect", side_effect=connect)
         self.connection = self.connect.start()
+        self.fullscreen_detection = patch.object(self.scroller, "_video_fullscreen", AsyncMock(return_value=False))
+        self.video_fullscreen = self.fullscreen_detection.start()
 
     async def asyncTearDown(self):
         await self.scroller.close()
         self.connect.stop()
+        self.fullscreen_detection.stop()
 
     async def test_native_wheel_has_direction_speed_and_page_center(self):
         await self.scroller.scroll("https://guide.example/", 0.5, 1, 506, 534)
@@ -37,6 +40,53 @@ class WebScrollTests(unittest.IsolatedAsyncioTestCase):
     async def test_idle_does_not_connect_or_send_events(self):
         await self.scroller.scroll("https://guide.example/", 0, 0, 506, 534)
         self.connection.assert_not_called()
+
+    async def test_fullscreen_stick_maps_four_directions_to_native_video_keys(self):
+        self.video_fullscreen.return_value = True
+        self.socket.receive_json.side_effect = [{"id": i} for i in range(1, 9)]
+        for x, y, key in [(1, 0, "ArrowRight"), (-1, 0, "ArrowLeft"),
+                          (0, -1, "ArrowUp"), (0, 1, "ArrowDown")]:
+            await self.scroller.scroll("https://video.example/", x, y, 506, 500)
+            events = [call.args[0] for call in self.socket.send_json.call_args_list[-2:]]
+            self.assertEqual([event["params"]["type"] for event in events], ["keyDown", "keyUp"])
+            self.assertTrue(all(event["params"]["code"] == key for event in events))
+            self.assertTrue(all(event["method"] == "Input.dispatchKeyEvent" for event in events))
+
+    async def test_fullscreen_hold_is_throttled_and_exit_restores_wheel_immediately(self):
+        self.video_fullscreen.return_value = True
+        self.socket.receive_json.side_effect = [{"id": i} for i in range(1, 6)]
+        with patch("web_scroll.monotonic", side_effect=[10, 10.1, 10.3]):
+            for _ in range(3):
+                await self.scroller.scroll("https://video.example/", 1, 0, 506, 500)
+        self.assertEqual(self.socket.send_json.await_count, 4)
+        self.video_fullscreen.return_value = False
+        await self.scroller.scroll("https://video.example/", 1, 0, 506, 500)
+        self.assertEqual(self.socket.send_json.call_args.args[0]["method"], "Input.dispatchMouseEvent")
+
+    async def test_fullscreen_uses_dominant_axis_and_ignores_small_motions(self):
+        self.video_fullscreen.return_value = True
+        await self.scroller.scroll("https://video.example/", 0.1, 0.2, 506, 500)
+        self.socket.send_json.assert_not_called()
+        self.socket.receive_json.side_effect = [{"id": 1}, {"id": 2}]
+        await self.scroller.scroll("https://video.example/", 0.5, -0.9, 506, 500)
+        self.assertEqual(self.socket.send_json.call_args.args[0]["params"]["code"], "ArrowUp")
+
+    async def test_fullscreen_key_failure_still_releases_key(self):
+        self.video_fullscreen.return_value = True
+        self.socket.receive_json.side_effect = [{"id": 1, "error": {}}, {"id": 2}]
+        with self.assertRaises(RuntimeError):
+            await self.scroller.scroll("https://video.example/", 1, 0, 506, 500)
+        self.assertEqual(self.socket.send_json.call_args.args[0]["params"]["type"], "keyUp")
+
+    async def test_fullscreen_detection_requires_a_video_inside_native_or_web_fullscreen(self):
+        for index, fullscreen in enumerate([True, False], 1):
+            self.scroller._socket = self.socket
+            self.socket.receive_json.return_value = {"id": index, "result": {"result": {"value": fullscreen}}}
+            self.assertEqual(await WebScroller._video_fullscreen(self.scroller), fullscreen)
+        expression = self.socket.send_json.call_args.args[0]["params"]["expression"]
+        self.assertIn('document.fullscreenElement', expression)
+        self.assertIn('data-screen="web"', expression)
+        self.assertIn("root.querySelector('video')", expression)
 
     async def test_space_sends_one_keydown_and_one_keyup(self):
         self.socket.receive_json.side_effect = [{"id": 1}, {"id": 2}]

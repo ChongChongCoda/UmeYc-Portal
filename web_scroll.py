@@ -3,6 +3,7 @@
 import asyncio
 import math
 import json
+from time import monotonic
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -15,6 +16,8 @@ class WebScroller:
         self._url = None
         self._title = ""
         self._sequence = 0
+        self._last_video_key = None
+        self._next_video_key_at = 0
 
     async def _disconnect(self):
         if self._socket is not None:
@@ -23,6 +26,8 @@ class WebScroller:
             await self._client.close()
         self._socket = self._client = self._url = None
         self._title = ""
+        self._last_video_key = None
+        self._next_video_key_at = 0
 
     async def close(self):
         async with self._lock:
@@ -155,10 +160,43 @@ class WebScroller:
 
     async def _dispatch(self, url, x, y, width, height, title=""):
         await self._ensure_page(url, title)
+        if await self._video_fullscreen():
+            if max(abs(x), abs(y)) < 0.25:
+                self._last_video_key = None
+                return
+            if abs(x) >= abs(y):
+                code, number = ("ArrowRight", 39) if x > 0 else ("ArrowLeft", 37)
+            else:
+                # Reader motion uses positive Y downwards.
+                code, number = ("ArrowDown", 40) if y > 0 else ("ArrowUp", 38)
+            now = monotonic()
+            if code == self._last_video_key and now < self._next_video_key_at:
+                return
+            await self._key(url, {"key": code, "code": code,
+                                  "windowsVirtualKeyCode": number, "nativeVirtualKeyCode": number}, title)
+            self._last_video_key = code
+            self._next_video_key_at = now + 0.25
+            return
+        self._last_video_key = None
         await self._request("Input.dispatchMouseEvent", {
             "type": "mouseWheel", "x": width / 2, "y": height / 2,
             "deltaX": x * 96, "deltaY": y * 96, "modifiers": 0,
         })
+
+    async def _video_fullscreen(self):
+        expression = """(() => {
+          const root = document.fullscreenElement || document.webkitFullscreenElement ||
+            (location.hostname === 'www.bilibili.com' &&
+              document.querySelector('.bpx-player-container[data-screen="web"], .bpx-player-container[data-screen="full"]'));
+          return !!(root && (root.matches('video') || root.querySelector('video')));
+        })()"""
+        result = await self._request("Runtime.evaluate", {"expression": expression, "returnByValue": True})
+        if "exceptionDetails" in result:
+            raise RuntimeError("无法读取视频全屏状态")
+        value = result.get("result", {}).get("value")
+        if not isinstance(value, bool):
+            raise RuntimeError("无法读取视频全屏状态")
+        return value
 
     async def _space(self, url, title=""):
         key = {"key": " ", "code": "Space", "windowsVirtualKeyCode": 32, "nativeVirtualKeyCode": 32}
