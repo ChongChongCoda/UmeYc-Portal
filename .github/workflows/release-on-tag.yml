@@ -1,0 +1,71 @@
+name: Publish Release
+
+on:
+  push:
+    tags:
+      - 'v1.*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate version tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          version = json.loads(Path('package.json').read_text())['version']
+          assert os.environ['RELEASE_TAG'] == 'v' + version, 'Tag must match package.json version'
+          PY
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint && pnpm format:check && pnpm exec tsc --noEmit
+      - run: pnpm test:coverage
+      - run: python3 -m unittest discover -s tests -v
+      - run: pnpm build
+      - run: python3 scripts/package.py
+
+      - name: Create checksum and release notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          cd out
+          sha256sum UmeYc-Portal.zip > SHA256SUMS.txt
+          cd ..
+          if [ -f "docs/releases/${RELEASE_TAG}.md" ]; then
+            cp "docs/releases/${RELEASE_TAG}.md" out/release-notes.md
+          else
+            cp README.md out/release-notes.md
+          fi
+
+      - name: Publish release with installation ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" out/UmeYc-Portal.zip out/SHA256SUMS.txt \
+            --verify-tag --draft --title "UmeYc-Portal ${RELEASE_TAG}" \
+            --notes-file out/release-notes.md
+          gh release edit "$RELEASE_TAG" --draft=false --latest
