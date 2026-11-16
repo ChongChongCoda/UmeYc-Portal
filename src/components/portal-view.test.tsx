@@ -7,11 +7,12 @@ import {
   getWebPageStateMock,
 } from '../__mocks__/decky-api';
 import { toLocalFileUrl } from '../lib/local-files';
-import { getOpenSideMenu, isVirtualKeyboardShowing } from '../lib/menu-state';
+import { getOpenSideMenu, isSteamBlockingUI, isVirtualKeyboardShowing } from '../lib/menu-state';
 
 vi.mock('../lib/menu-state', () => ({
   getOpenSideMenu: vi.fn(),
   isVirtualKeyboardShowing: vi.fn(),
+  isSteamBlockingUI: vi.fn(),
 }));
 vi.mock('./reader-input', () => ({ ReaderInput: () => <div data-testid="reader-input" /> }));
 vi.mock('./url-modal', () => ({ UrlModal: () => <div>url panel</div> }));
@@ -73,6 +74,7 @@ describe('PortalView and PortalViewOuter', () => {
     getWebPageStateMock.mockReset();
     vi.mocked(getOpenSideMenu).mockReturnValue(2);
     vi.mocked(isVirtualKeyboardShowing).mockReturnValue(undefined);
+    vi.mocked(isSteamBlockingUI).mockReturnValue(false);
 
     createBrowserView.mockReturnValue({
       GetBrowser: () => ({
@@ -110,6 +112,51 @@ describe('PortalView and PortalViewOuter', () => {
         },
       },
     },
+  });
+
+  it('releases composition and reader input for Steam blocking UI, then restores the page', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(useGlobalState).mockReturnValue([
+        { ...createState(ViewMode.Sidebar), sidebarVideoSpace: true },
+      ] as never);
+      const { queryByTestId, unmount } = render(<PortalView />);
+      expect(setVisible).toHaveBeenLastCalledWith(true);
+      expect(queryByTestId('reader-input')).toBeTruthy();
+      vi.mocked(isSteamBlockingUI).mockReturnValue(true);
+      await act(async () => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(setVisible).toHaveBeenLastCalledWith(false);
+      expect(useUIComposition).toHaveBeenCalledTimes(1);
+      expect(queryByTestId('reader-input')).toBeNull();
+      expect(destroy).not.toHaveBeenCalled();
+      expect(sendWebSpaceMock).not.toHaveBeenCalled();
+      vi.mocked(isSteamBlockingUI).mockReturnValue(false);
+      await act(async () => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(setVisible).toHaveBeenLastCalledWith(true);
+      expect(useUIComposition).toHaveBeenLastCalledWith(1);
+      expect(useUIComposition).toHaveBeenCalledTimes(2);
+      expect(queryByTestId('reader-input')).toBeTruthy();
+      expect(loadURL).toHaveBeenCalledTimes(1);
+      expect(sendWebSpaceMock).not.toHaveBeenCalled();
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('hides active Portal panels while Steam blocking UI is shown', () => {
+    vi.mocked(isSteamBlockingUI).mockReturnValue(true);
+    vi.mocked(useGlobalState).mockReturnValue([
+      { ...createState(ViewMode.Sidebar), activePanel: 'url' },
+      vi.fn(),
+    ] as never);
+    const { getByLabelText } = render(<PortalView />);
+    expect(getByLabelText('Portal 左侧面板')).toHaveStyle({ display: 'none' });
+    expect(setVisible).toHaveBeenLastCalledWith(false);
   });
 
   it.each(['url', 'phone', 'files'] as const)(

@@ -5,6 +5,10 @@ interface MenuStore {
 interface WindowInstance {
   MenuStore?: MenuStore;
   VirtualKeyboardManager?: { IsShowingVirtualKeyboard?: { Value: boolean } };
+  LocationPathName?: string;
+  BViewingPreLoginRoute?(): boolean;
+  GetShowingGlobalModal?(): boolean;
+  ModalManager?: { active_modal?: unknown };
 }
 
 const menuWindow = (): WindowInstance | undefined => {
@@ -30,3 +34,18 @@ export const getOpenSideMenu = (): number | undefined => {
 
 export const isVirtualKeyboardShowing = (): boolean | undefined =>
   menuWindow()?.VirtualKeyboardManager?.IsShowingVirtualKeyboard?.Value;
+
+// Authentication errors are full routes rather than ModalManager dialogs. Read
+// the main window even when a separate QAM/BrowserView currently owns focus.
+export const isSteamBlockingUI = (): boolean => {
+  const host = window as unknown as {
+    SteamUIStore?: { WindowStore?: { GamepadUIMainWindowInstance?: WindowInstance } };
+  };
+  const main = host.SteamUIStore?.WindowStore?.GamepadUIMainWindowInstance ?? menuWindow();
+  return !!(
+    main?.LocationPathName === '/error' ||
+    main?.BViewingPreLoginRoute?.() ||
+    main?.GetShowingGlobalModal?.() ||
+    main?.ModalManager?.active_modal
+  );
+};

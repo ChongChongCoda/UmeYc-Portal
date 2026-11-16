@@ -6,7 +6,7 @@ import { useGlobalState } from '../hooks/global-state';
 import { intersectRectangles } from '../lib/geometry';
 import { UIComposition, useUIComposition } from '../hooks/use-ui-composition';
 import { localPathFromUrl, prepareLocalFile } from '../lib/local-files';
-import { getOpenSideMenu, isVirtualKeyboardShowing } from '../lib/menu-state';
+import { getOpenSideMenu, isSteamBlockingUI, isVirtualKeyboardShowing } from '../lib/menu-state';
 import { ReaderInput } from './reader-input';
 import { WebHeader, WEB_HEADER_HEIGHT } from './web-header';
 import { rememberPageTitle, rememberUrl, removeUrl } from '../lib/url-history';
@@ -84,6 +84,11 @@ const getWebPageState = callable<[url: string, title: string], { url: string; ti
   'get_web_page_state',
 );
 
+const BrowserComposition = () => {
+  useUIComposition(UIComposition.Notification);
+  return null;
+};
+
 const Browser = ({
   url,
   visible,
@@ -97,7 +102,6 @@ const Browser = ({
   suppressPlayback,
   pageTitle,
 }: BrowserProps) => {
-  useUIComposition(UIComposition.Notification);
   const [, , stateContext] = useGlobalState();
   const web = /^https?:\/\//i.test(url);
 
@@ -263,16 +267,23 @@ const Browser = ({
     return () => handles?.view.Destroy();
   }, [handles]);
 
-  return web && visible && handles ? (
-    <WebHeader
-      title={pageTitle || ''}
-      getUrl={() => handles.view.URL || url}
-      getTitle={() => handles.view.Title || ''}
-      x={x}
-      y={y}
-      width={width}
-    />
-  ) : null;
+  // Unmount the request entirely when hidden. Requesting Hidden (0) would also
+  // override Steam's fallback to Opaque on the credential-error route.
+  return (
+    <>
+      {visible && <BrowserComposition />}
+      {web && visible && handles && (
+        <WebHeader
+          title={pageTitle || ''}
+          getUrl={() => handles.view.URL || url}
+          getTitle={() => handles.view.Title || ''}
+          x={x}
+          y={y}
+          width={width}
+        />
+      )}
+    </>
+  );
 };
 
 const getBounds = (windowView?: DeckWindow | null) => {
@@ -353,6 +364,7 @@ const getDeckComponentBounds = () => {
     virtualKeyboard: virtualKeyboardBounds,
     qamOpen: !qamHidden,
     dropdownOpen,
+    steamBlockingUI: isSteamBlockingUI(),
     pageTitle: (window as unknown as { portal?: BrowserViewHandle }).portal?.Title,
   };
 };
@@ -387,6 +399,7 @@ const areDeckComponentBoundsEqual = (
     areRectanglesEqual(first.virtualKeyboard, second.virtualKeyboard) &&
     first.qamOpen === second.qamOpen &&
     first.dropdownOpen === second.dropdownOpen &&
+    first.steamBlockingUI === second.steamBlockingUI &&
     first.pageTitle === second.pageTitle
   );
 };
@@ -415,13 +428,15 @@ export const PortalView = () => {
     virtualKeyboard,
     qamOpen,
     dropdownOpen,
+    steamBlockingUI,
     pageTitle: nativeTitle,
   } = useDeckComponentBounds();
   const [
     { url, visible, sidebarVideoSpace, rightStickFullscreen, activePanel, pageTitle, pageTitleUrl },
     setGlobalState,
   ] = useGlobalState();
-  const readerVisible = !!url && visible && !activePanel && !dropdownOpen && qamOpen;
+  const readerVisible =
+    !!url && visible && !activePanel && !dropdownOpen && !steamBlockingUI && qamOpen;
   const closePanel = () =>
     setGlobalState((state) => ({ ...state, activePanel: undefined, visible: true }));
   const Panel = activePanel
@@ -491,7 +506,7 @@ export const PortalView = () => {
           preserveHiddenBounds
           sidebarOpen={qamOpen}
           playbackSpace={sidebarVideoSpace === true && /^https?:\/\//i.test(url)}
-          suppressPlayback={dropdownOpen || !!activePanel}
+          suppressPlayback={dropdownOpen || !!activePanel || steamBlockingUI}
           pageTitle={pageTitleUrl === url ? pageTitle || nativeTitle : nativeTitle}
         />
       )}
@@ -512,7 +527,7 @@ export const PortalView = () => {
             top: bounds.y,
             width: bounds.width,
             height: bounds.height,
-            display: qamOpen ? 'block' : 'none',
+            display: qamOpen && !steamBlockingUI ? 'block' : 'none',
             overflow: 'hidden',
             pointerEvents: 'auto',
           }}
