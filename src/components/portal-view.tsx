@@ -5,19 +5,10 @@ import { callable, toaster } from '@decky/api';
 import { useGlobalState } from '../hooks/global-state';
 import { intersectRectangles } from '../lib/geometry';
 import { UIComposition, useUIComposition } from '../hooks/use-ui-composition';
-import { BAR_WIDTH, ControlBar } from './control-bar';
-import { MinimisedIndicator } from './minimised-indicator';
 import { localPathFromUrl, prepareLocalFile } from '../lib/local-files';
 import { getOpenSideMenu, isVirtualKeyboardShowing } from '../lib/menu-state';
 import { ReaderInput } from './reader-input';
-import {
-  PICTURE_HEIGHT,
-  PICTURE_WIDTH,
-  Position,
-  SCREEN_HEIGHT,
-  SCREEN_WIDTH,
-  ViewMode,
-} from '../lib/util';
+import { SCREEN_HEIGHT, SCREEN_WIDTH, ViewMode } from '../lib/util';
 
 interface BrowserProps {
   url: string;
@@ -323,9 +314,8 @@ const useDeckComponentBounds = () => {
 
 export const PortalView = () => {
   const { nav, qam, virtualKeyboard, qamOpen, dropdownOpen } = useDeckComponentBounds();
-  const [{ viewMode, position, size, url, visible, ...settings }] = useGlobalState();
-  const isSidebar = viewMode === ViewMode.Sidebar;
-  const readerVisible = visible && !dropdownOpen && (!isSidebar || qamOpen);
+  const [{ url, visible, sidebarVideoSpace }] = useGlobalState();
+  const readerVisible = visible && !dropdownOpen && qamOpen;
   const localPath = (() => {
     try {
       return localPathFromUrl(url);
@@ -333,9 +323,6 @@ export const PortalView = () => {
       return null;
     }
   })();
-
-  const pictureWidth = PICTURE_WIDTH * size;
-  const pictureHeight = PICTURE_HEIGHT * size;
 
   const availableBounds = [
     {
@@ -380,128 +367,21 @@ export const PortalView = () => {
     height: SCREEN_HEIGHT,
   };
 
-  const margin = isSidebar ? 0 : viewMode === ViewMode.Expand ? 30 : settings.margin;
-
-  bounds.x += margin;
-  bounds.y += margin;
-  bounds.width -= margin * 2;
-  bounds.height -= margin * 2;
-
-  switch (viewMode) {
-    case ViewMode.Sidebar:
-      // The browser keeps its last bounds while hidden, preserving the scroll offset.
-      break;
-    case ViewMode.Expand:
-      {
-        // do nothing, screen is calculated initially to fullscreen
-      }
-      break;
-
-    case ViewMode.Minimised:
-      return (
-        <>
-          <Browser url={url} visible={false} x={0} y={0} width={0} height={0} />
-          <MinimisedIndicator position={position} margin={settings.margin} />
-        </>
-      );
-
-    case ViewMode.Picture:
-      {
-        switch (position) {
-          case Position.Top:
-            {
-              bounds.x += bounds.width / 2 - pictureWidth / 2;
-            }
-            break;
-          case Position.TopRight:
-            {
-              bounds.x += bounds.width - pictureWidth;
-            }
-            break;
-          case Position.Right:
-            {
-              bounds.x += bounds.width - pictureWidth;
-              bounds.y += bounds.height / 2 - pictureHeight / 2;
-            }
-            break;
-          case Position.BottomRight:
-            {
-              bounds.x += bounds.width - pictureWidth;
-              bounds.y += bounds.height - pictureHeight;
-            }
-            break;
-          case Position.Bottom:
-            {
-              bounds.x += bounds.width / 2 - pictureWidth / 2;
-              bounds.y += bounds.height - pictureHeight;
-            }
-            break;
-          case Position.BottomLeft:
-            {
-              bounds.y += bounds.height - pictureHeight;
-            }
-            break;
-          case Position.Left:
-            {
-              bounds.y += bounds.height / 2 - pictureHeight / 2;
-            }
-            break;
-          case Position.TopLeft:
-            {
-              // do nothing, screen is calculated initially to top left
-            }
-            break;
-        }
-
-        bounds.width = pictureWidth;
-        bounds.height = pictureHeight;
-      }
-      break;
-  }
-
-  const showControlBar = settings.controlBar && !isSidebar;
-
-  const barOnLeft =
-    viewMode === ViewMode.Picture &&
-    (position === Position.TopRight ||
-      position === Position.Right ||
-      position === Position.BottomRight);
-
-  const barSide = barOnLeft ? 'left' : 'right';
-
-  const shrinkForBar = showControlBar && viewMode === ViewMode.Expand;
-  const barX = barOnLeft
-    ? bounds.x - BAR_WIDTH
-    : bounds.x + bounds.width - (shrinkForBar ? BAR_WIDTH : 0);
-  const browserX = bounds.x;
-  const browserWidth = shrinkForBar ? bounds.width - BAR_WIDTH : bounds.width;
-
   return (
     <>
       <Browser
         url={url}
         visible={readerVisible}
-        x={browserX}
+        x={bounds.x}
         y={bounds.y}
-        width={browserWidth}
+        width={bounds.width}
         height={bounds.height}
-        preserveHiddenBounds={isSidebar}
-        sidebarOpen={isSidebar ? qamOpen : undefined}
-        playbackSpace={
-          isSidebar && settings.sidebarVideoSpace === true && /^https?:\/\//i.test(url)
-        }
+        preserveHiddenBounds
+        sidebarOpen={qamOpen}
+        playbackSpace={sidebarVideoSpace === true && /^https?:\/\//i.test(url)}
         suppressPlayback={dropdownOpen}
       />
       {readerVisible && <ReaderInput path={localPath ?? undefined} />}
-      {readerVisible && showControlBar && (
-        <ControlBar
-          x={barX}
-          y={bounds.y}
-          height={bounds.height}
-          side={barSide}
-          viewMode={viewMode}
-        />
-      )}
     </>
   );
 };

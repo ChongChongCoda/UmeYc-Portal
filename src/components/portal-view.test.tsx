@@ -27,12 +27,6 @@ vi.mock('../hooks/global-state', () => ({
   useGlobalState: vi.fn(),
 }));
 
-vi.mock('./minimised-indicator', () => ({
-  MinimisedIndicator: ({ position, margin }: { position: number; margin: number }) => (
-    <div data-testid="minimised-indicator" data-position={position} data-margin={margin} />
-  ),
-}));
-
 vi.mock('../hooks/use-ui-composition', () => ({
   UIComposition: {
     Notification: 1,
@@ -64,15 +58,10 @@ const createState = (viewMode: ViewMode, position = Position.TopRight, margin = 
   controlBar: true,
 });
 
-// BAR_WIDTH = 48
-// PICTURE_WIDTH = 854 * 0.4 = 341.6
-// PICTURE_HEIGHT = 341.6 / 1.85 ≈ 184.6486
-// Bar extends outside PiP bounds, so browserWidth = pictureWidth = 341.6
-
 describe('PortalView and PortalViewOuter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getOpenSideMenu).mockReturnValue(undefined);
+    vi.mocked(getOpenSideMenu).mockReturnValue(2);
     vi.mocked(isVirtualKeyboardShowing).mockReturnValue(undefined);
 
     createBrowserView.mockReturnValue({
@@ -221,8 +210,8 @@ describe('PortalView and PortalViewOuter', () => {
     }
   });
 
-  it.each([ViewMode.Sidebar, ViewMode.Expand])(
-    'keeps native dropdowns clickable in layout %s and restores on cancellation',
+  it.each([ViewMode.Sidebar])(
+    'keeps native dropdowns clickable with the sidebar and restores on cancellation',
     (mode) => {
       vi.useFakeTimers();
       try {
@@ -283,25 +272,6 @@ describe('PortalView and PortalViewOuter', () => {
       });
       expect(setVisible).toHaveBeenLastCalledWith(true);
       expect(createBrowserView).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('restores fullscreen width after QAM closes even when popup document stays visible', () => {
-    vi.useFakeTimers();
-    try {
-      getGamepadNavigationTrees.mockReturnValue([qamTree()]);
-      vi.mocked(getOpenSideMenu).mockReturnValue(2);
-      vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Expand)] as never);
-      render(<PortalView />);
-      expect(setBounds).toHaveBeenLastCalledWith(30, 30, 426, 474);
-      vi.mocked(getOpenSideMenu).mockReturnValue(0);
-      act(() => {
-        vi.advanceTimersByTime(100);
-      });
-      expect(setBounds).toHaveBeenLastCalledWith(30, 30, 746, 474);
-      expect(setVisible).toHaveBeenLastCalledWith(true);
     } finally {
       vi.useRealTimers();
     }
@@ -399,7 +369,7 @@ describe('PortalView and PortalViewOuter', () => {
 
   it('resolves a fresh preview address for a persisted local file', async () => {
     const path = '/run/media/deck/SD/明末第一章.JPG';
-    const state = { ...createState(ViewMode.Picture), url: toLocalFileUrl(path) };
+    const state = { ...createState(ViewMode.Sidebar), url: toLocalFileUrl(path) };
     vi.mocked(useGlobalState).mockReturnValue([state] as never);
     prepareLocalFileMock.mockResolvedValueOnce({ url: 'http://127.0.0.1:1234/viewer/new-token' });
     render(<PortalView />);
@@ -417,10 +387,10 @@ describe('PortalView and PortalViewOuter', () => {
       }),
     );
     vi.mocked(useGlobalState).mockReturnValue([
-      { ...createState(ViewMode.Picture), url: toLocalFileUrl('/tmp/guide.JPG') },
+      { ...createState(ViewMode.Sidebar), url: toLocalFileUrl('/tmp/guide.JPG') },
     ] as never);
     const { rerender } = render(<PortalView />);
-    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Picture)] as never);
+    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
     rerender(<PortalView />);
     await act(async () => {
       resolve({ url: 'http://127.0.0.1:1234/viewer/stale' });
@@ -430,189 +400,26 @@ describe('PortalView and PortalViewOuter', () => {
   });
 
   it('renders portal view from outer component when open', () => {
-    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Picture)] as never);
+    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
 
     render(<PortalViewOuter />);
 
     expect(createBrowserView).toHaveBeenCalledTimes(1);
   });
 
-  it('creates browser view when minimised (keeps it alive) and renders indicator', () => {
-    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Minimised)] as never);
-
-    const { container } = render(<PortalViewOuter />);
-
-    expect(createBrowserView).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('[data-testid="minimised-indicator"]')).toBeTruthy();
-  });
-
-  it('sets bounds to 0x0 and hides browser when minimised', async () => {
-    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Minimised)] as never);
-
-    render(<PortalView />);
-
-    await waitFor(() => {
-      expect(setBounds).toHaveBeenCalled();
-    });
-
-    const [x, y, width, height] = setBounds.mock.calls[setBounds.mock.calls.length - 1];
-    expect(x).toBe(0);
-    expect(y).toBe(0);
-    expect(width).toBe(0);
-    expect(height).toBe(0);
-    expect(setVisible).toHaveBeenCalledWith(false);
-  });
-
   it('renders gracefully when decky main window instance is unavailable', () => {
-    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Picture)] as never);
+    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
 
     const original = Router.WindowStore!.GamepadUIMainWindowInstance;
     Router.WindowStore!.GamepadUIMainWindowInstance = undefined as never;
 
     try {
       const { container } = render(<PortalView />);
-      expect(container.querySelector('[data-testid="control-bar"]')).toBeTruthy();
+      expect(container.querySelector('button')).toBeNull();
       expect(createBrowserView).not.toHaveBeenCalled();
     } finally {
       Router.WindowStore!.GamepadUIMainWindowInstance = original;
     }
-  });
-
-  it('creates browser view and updates visibility, url, and bounds in picture mode', async () => {
-    vi.mocked(useGlobalState).mockReturnValue([
-      createState(ViewMode.Picture, Position.TopRight, 20),
-    ] as never);
-
-    const { unmount } = render(<PortalView />);
-
-    await waitFor(() => {
-      expect(setVisible).toHaveBeenCalledWith(true);
-      expect(loadURL).toHaveBeenCalledWith('https://netflix.com');
-      expect(setBounds).toHaveBeenCalled();
-    });
-
-    // TopRight → bar extends outside, browserX = bounds.x = 492.4
-    const [x, y, width, height] = setBounds.mock.calls[setBounds.mock.calls.length - 1];
-    expect(x).toBeCloseTo(492.4, 3);
-    expect(y).toBeCloseTo(20, 3);
-    expect(width).toBeCloseTo(341.6, 3);
-    expect(height).toBeCloseTo(184.6486, 3);
-
-    unmount();
-    expect(destroy).toHaveBeenCalledTimes(1);
-    expect(useUIComposition).toHaveBeenCalledWith(1);
-  });
-
-  it('uses expanded layout margin and deck component bounds intersection', async () => {
-    getGamepadNavigationTrees.mockReturnValue([
-      {
-        id: 'MainNavMenuContainer',
-        m_Root: {
-          m_element: {
-            ownerDocument: {
-              defaultView: {
-                document: { hidden: false },
-                screenLeft: 0,
-                screenTop: 0,
-                outerWidth: 100,
-                outerHeight: 534,
-              },
-            },
-          },
-        },
-      },
-      {
-        id: 'QuickAccess-NA',
-        m_Root: {
-          m_element: {
-            ownerDocument: {
-              defaultView: {
-                document: { hidden: false },
-                screenLeft: 0,
-                screenTop: 0,
-                outerWidth: 200,
-                outerHeight: 534,
-              },
-            },
-          },
-        },
-      },
-      {
-        id: 'virtual keyboard',
-        m_Root: {
-          m_element: {
-            ownerDocument: {
-              defaultView: {
-                document: { hidden: false },
-              },
-            },
-          },
-        },
-      },
-    ]);
-
-    vi.mocked(useGlobalState).mockReturnValue([
-      createState(ViewMode.Expand, Position.BottomRight, 10),
-    ] as never);
-
-    render(<PortalView />);
-
-    await waitFor(() => {
-      expect(setBounds).toHaveBeenCalled();
-    });
-
-    // Expand mode → bar shrinks browser width: browserWidth = 494 - 48 = 446
-    const [x, y, width, height] = setBounds.mock.calls[setBounds.mock.calls.length - 1];
-    expect(x).toBe(130);
-    expect(y).toBe(30);
-    expect(width).toBe(446);
-    expect(height).toBe(234);
-  });
-
-  it.each([
-    // Bar extends outside PiP bounds, browserX = bounds.x, browserWidth = 341.6
-    [Position.Top, 256.2, 20],
-    [Position.TopRight, 492.4, 20],
-    [Position.Right, 492.4, 174.6757],
-    [Position.BottomRight, 492.4, 329.3514],
-    [Position.Bottom, 256.2, 329.3514],
-    [Position.BottomLeft, 20, 329.3514],
-    [Position.Left, 20, 174.6757],
-    [Position.TopLeft, 20, 20],
-  ])('places picture mode correctly for position %s', async (position, expectedX, expectedY) => {
-    vi.mocked(useGlobalState).mockReturnValue([
-      createState(ViewMode.Picture, position as Position, 20),
-    ] as never);
-
-    render(<PortalView />);
-
-    await waitFor(() => {
-      expect(setBounds).toHaveBeenCalled();
-    });
-
-    const [x, y, width, height] = setBounds.mock.calls[setBounds.mock.calls.length - 1];
-    expect(x).toBeCloseTo(expectedX, 3);
-    expect(y).toBeCloseTo(expectedY, 3);
-    expect(width).toBeCloseTo(341.6, 3);
-    expect(height).toBeCloseTo(184.6486, 3);
-  });
-
-  it('hides control bar when visible is false', () => {
-    const state = createState(ViewMode.Picture);
-    state.visible = false;
-    vi.mocked(useGlobalState).mockReturnValue([state] as never);
-
-    const { container } = render(<PortalView />);
-
-    expect(container.querySelector('[data-testid="control-bar"]')).toBeNull();
-  });
-
-  it('shows control bar when visible is true', () => {
-    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Picture)] as never);
-
-    const { container } = render(<PortalView />);
-
-    expect(container.querySelector('[data-testid="control-bar"]')).toBeTruthy();
   });
 
   it('updates deck component bounds only when interval polling detects changes', async () => {
@@ -623,7 +430,7 @@ describe('PortalView and PortalViewOuter', () => {
       callCount += 1;
 
       if (callCount < 3) {
-        return [];
+        return [qamTree()];
       }
 
       return [
@@ -646,7 +453,7 @@ describe('PortalView and PortalViewOuter', () => {
       ];
     });
 
-    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Picture)] as never);
+    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
 
     try {
       render(<PortalView />);
@@ -666,16 +473,6 @@ describe('PortalView and PortalViewOuter', () => {
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  it('hides control bar when controlBar is false', () => {
-    const state = createState(ViewMode.Picture);
-    state.controlBar = false;
-    vi.mocked(useGlobalState).mockReturnValue([state] as never);
-
-    const { container } = render(<PortalView />);
-
-    expect(container.querySelector('[data-testid="control-bar"]')).toBeNull();
   });
 
   it('keeps same bounds when polling returns equal non-null rectangles', () => {
@@ -700,7 +497,7 @@ describe('PortalView and PortalViewOuter', () => {
       },
     ]);
 
-    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Picture)] as never);
+    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
 
     try {
       render(<PortalView />);
@@ -715,5 +512,28 @@ describe('PortalView and PortalViewOuter', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+  it.each([ViewMode.Picture, ViewMode.Expand, ViewMode.Minimised])(
+    'uses sidebar bounds even with stale legacy layout %s',
+    (mode) => {
+      getGamepadNavigationTrees.mockReturnValue([qamTree()]);
+      vi.mocked(useGlobalState).mockReturnValue([
+        createState(mode, Position.BottomRight, 60),
+      ] as never);
+      const { container } = render(<PortalView />);
+      expect(setBounds).toHaveBeenLastCalledWith(0, 0, 534, 534);
+      expect(setVisible).toHaveBeenLastCalledWith(true);
+      expect(container.querySelector('[data-testid="reader-input"]')).toBeTruthy();
+      expect(container.querySelector('button')).toBeNull();
+    },
+  );
+
+  it('creates and destroys the sidebar browser exactly once', () => {
+    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
+    const { unmount } = render(<PortalView />);
+    expect(loadURL).toHaveBeenCalledWith('https://netflix.com');
+    expect(useUIComposition).toHaveBeenCalledWith(1);
+    unmount();
+    expect(destroy).toHaveBeenCalledOnce();
   });
 });

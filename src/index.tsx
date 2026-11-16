@@ -12,14 +12,14 @@ import { rememberUrl } from './lib/url-history';
 
 export default definePlugin(() => {
   const defaultState: State = {
-    viewMode: ViewMode.Closed,
-    previousViewMode: ViewMode.Picture,
+    viewMode: ViewMode.Sidebar,
+    previousViewMode: ViewMode.Sidebar,
     visible: true,
     position: Position.TopRight,
     margin: 30,
     size: 1,
     url: 'https://netflix.com',
-    controlBar: true,
+    controlBar: false,
     sidebarVideoSpace: false,
   };
 

@@ -58,6 +58,7 @@ describe('plugin entrypoint', () => {
 
     const provider = globalComponentFactory!();
     const stateManager = provider.props.value as StateManager<Record<string, unknown>>;
+    expect(stateManager.get().viewMode).toBe(5);
 
     stateManager.set({
       viewMode: 2,

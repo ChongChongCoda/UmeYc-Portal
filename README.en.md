@@ -2,7 +2,7 @@
 
 # UmeYc-Portal
 
-**UmeYc-Portal fork:** Simplified Chinese UI, a game-mode local file picker, sidebar-linked reading layout, right-stick image scrolling, and session-only reading position memory. See [中文说明与构建步骤](README.zh-CN.md). Based on upstream stable v0.1.1; upstream attribution and BSD license are preserved. For this fork, build with `pnpm build && python3 scripts/package.py` and install `out/UmeYc-Portal.zip`.
+**UmeYc-Portal fork:** Simplified Chinese UI, a game-mode local file picker, sidebar-only reading layout, right-stick image scrolling, and session-only reading position memory. See [中文说明与构建步骤](README.zh-CN.md). Based on upstream stable v0.1.1; upstream attribution and BSD license are preserved. For this fork, build with `pnpm build && python3 scripts/package.py` and install `out/UmeYc-Portal.zip`.
 
 Portal is a [Decky Loader](https://decky.xyz/) plugin that provides an in-game web portal for streaming, browsing, and media playback on Steam Deck.
 

@@ -17,11 +17,6 @@ vi.mock('./url-modal', () => ({
   UrlModalWithState: () => <div>URL Modal</div>,
 }));
 
-interface DropdownOption {
-  data: number;
-  label: string;
-}
-
 vi.mock('@decky/ui', () => ({
   Field: ({ children, label }: { children: ReactNode; label: string }) => (
     <div>
@@ -71,64 +66,6 @@ vi.mock('@decky/ui', () => ({
       {description && <span data-testid="toggle-description">{description}</span>}
     </label>
   ),
-  DropdownItem: ({
-    label,
-    selectedOption,
-    rgOptions,
-    onMenuOpened,
-    onChange,
-  }: {
-    label: string;
-    selectedOption: number;
-    rgOptions: DropdownOption[];
-    onMenuOpened?: () => void;
-    onChange: (option: DropdownOption) => void;
-  }) => (
-    <div>
-      <button onClick={onMenuOpened}>Open {label}</button>
-      <select
-        aria-label={label}
-        value={selectedOption}
-        onChange={(e) =>
-          onChange(rgOptions.find((o) => o.data === Number(e.target.value)) as DropdownOption)
-        }
-      >
-        {rgOptions.map((option) => (
-          <option key={option.data} value={option.data}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  ),
-  SliderField: ({
-    label,
-    value,
-    onChange,
-    min,
-    max,
-    step,
-  }: {
-    label: string;
-    value: number;
-    onChange: (val: number) => void;
-    min: number;
-    max: number;
-    step: number;
-  }) => (
-    <label>
-      {label}
-      <input
-        aria-label={label}
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.currentTarget.value))}
-      />
-    </label>
-  ),
   showModal: vi.fn(),
 }));
 
@@ -149,22 +86,26 @@ describe('Settings', () => {
     localStorage.clear();
   });
 
-  it('switches to the sidebar reading layout', () => {
-    let state = createState(ViewMode.Picture);
-    vi.mocked(useGlobalState).mockReturnValue([
-      state,
-      (updater: (s: typeof state) => typeof state) => {
-        state = updater(state);
-      },
-      {},
-    ] as never);
-    render(<Settings />);
-    fireEvent.change(screen.getByLabelText('布局'), {
-      target: { value: String(ViewMode.Sidebar) },
-    });
-    expect(state.viewMode).toBe(ViewMode.Sidebar);
-    expect(state.visible).toBe(true);
-  });
+  it.each([ViewMode.Picture, ViewMode.Expand, ViewMode.Minimised, ViewMode.Closed])(
+    'opens settings directly in sidebar mode from legacy mode %s',
+    (mode) => {
+      let state = createState(mode);
+      vi.mocked(useGlobalState).mockReturnValue([
+        state,
+        (updater: (s: typeof state) => typeof state) => {
+          state = updater(state);
+        },
+        {},
+      ] as never);
+      render(<Settings />);
+      expect(state.viewMode).toBe(ViewMode.Sidebar);
+      expect(state.visible).toBe(true);
+      for (const label of ['布局', '展开', '控制栏', '位置', '大小', '边距']) {
+        expect(screen.queryByLabelText(label)).toBeNull();
+        expect(screen.queryByText(label)).toBeNull();
+      }
+    },
+  );
 
   it('offers optional sidebar space control for websites only', () => {
     let state = { ...createState(ViewMode.Sidebar), sidebarVideoSpace: false };
@@ -201,7 +142,7 @@ describe('Settings', () => {
     await waitFor(() => expect(localPathFromUrl(state.url)).toBe(path));
     expect(openFilePicker.mock.calls[0][1]).toBe('/run/media');
     expect(state.visible).toBe(true);
-    expect(state.viewMode).toBe(ViewMode.Picture);
+    expect(state.viewMode).toBe(ViewMode.Sidebar);
     expect(localStorage.getItem('portal.localDirectory')).toBe('/run/media/deck/SD/明末攻略');
   });
 
@@ -240,21 +181,24 @@ describe('Settings', () => {
     expect(state.visible).toBe(true);
   });
 
-  it('opens from closed state and can be closed again', () => {
+  it('can reopen a closed reader in sidebar mode', () => {
     let state = createState(ViewMode.Closed);
-    const setGlobalState = vi.fn((updater: (s: typeof state) => typeof state) => {
-      state = updater(state);
-    });
-
-    vi.mocked(useGlobalState).mockReturnValue([state, setGlobalState, {}] as never);
-
+    vi.mocked(useGlobalState).mockReturnValue([
+      state,
+      (updater: (s: typeof state) => typeof state) => {
+        state = updater(state);
+      },
+      {},
+    ] as never);
     render(<Settings />);
-
+    expect(state.viewMode).toBe(ViewMode.Sidebar);
+    // Model closing the page while the settings panel remains mounted.
+    state = createState(ViewMode.Closed);
     fireEvent.click(screen.getByText('打开'));
-    expect(state.viewMode).toBe(ViewMode.Picture);
+    expect(state.viewMode).toBe(ViewMode.Sidebar);
   });
 
-  it('handles address modal, expand toggle and close in open mode', () => {
+  it('handles address modal and close in sidebar mode', () => {
     let state = createState(ViewMode.Picture);
     const setGlobalState = vi.fn((updater: (s: typeof state) => typeof state) => {
       state = updater(state);
@@ -267,29 +211,8 @@ describe('Settings', () => {
     fireEvent.click(screen.getByRole('button', { name: '编辑网址' }));
     expect(showModal).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByLabelText('展开'));
-    expect(state.viewMode).toBe(ViewMode.Expand);
-
     fireEvent.click(screen.getByText('关闭'));
     expect(state.viewMode).toBe(ViewMode.Closed);
-  });
-
-  it('preserves minimised state when opening settings', () => {
-    let state = createState(ViewMode.Minimised);
-    const setGlobalState = vi.fn((updater: (s: typeof state) => typeof state) => {
-      state = updater(state);
-    });
-
-    vi.mocked(useGlobalState).mockReturnValue([state, setGlobalState, {}] as never);
-
-    render(<Settings />);
-
-    // The useEffect should make visible but NOT change viewMode from Minimised
-    expect(setGlobalState).toHaveBeenCalled();
-    const updater = setGlobalState.mock.calls[0][0] as (s: typeof state) => typeof state;
-    const result = updater(createState(ViewMode.Minimised));
-    expect(result.viewMode).toBe(ViewMode.Minimised);
-    expect(result.visible).toBe(true);
   });
 
   it('keeps the complete URL on one line beside an icon-only QR button', () => {
@@ -325,143 +248,5 @@ describe('Settings', () => {
     expect(screen.queryByText(state.url)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '浏览历史' }));
     expect(showModal).toHaveBeenCalledOnce();
-  });
-
-  it('auto-restores from closed to picture when opening settings', () => {
-    let state = createState(ViewMode.Closed);
-    const setGlobalState = vi.fn((updater: (s: typeof state) => typeof state) => {
-      state = updater(state);
-    });
-
-    vi.mocked(useGlobalState).mockReturnValue([state, setGlobalState, {}] as never);
-
-    render(<Settings />);
-
-    expect(setGlobalState).toHaveBeenCalled();
-    const updater = setGlobalState.mock.calls[0][0] as (s: typeof state) => typeof state;
-    const result = updater(createState(ViewMode.Closed));
-    expect(result.viewMode).toBe(ViewMode.Picture);
-    expect(result.visible).toBe(true);
-  });
-
-  it('shows close button when minimised', () => {
-    const state = createState(ViewMode.Minimised);
-    const setGlobalState = vi.fn();
-
-    vi.mocked(useGlobalState).mockReturnValue([state, setGlobalState, {}] as never);
-
-    render(<Settings />);
-
-    expect(screen.getByText('关闭')).toBeTruthy();
-  });
-
-  it('shows pip controls with minimised warning when minimised', () => {
-    const state = createState(ViewMode.Minimised);
-    const setGlobalState = vi.fn();
-
-    vi.mocked(useGlobalState).mockReturnValue([state, setGlobalState, {}] as never);
-
-    render(<Settings />);
-
-    expect(screen.getByText(/窗口已最小化/)).toBeTruthy();
-    expect(screen.getByLabelText('位置')).toBeTruthy();
-    expect(screen.getByLabelText('大小')).toBeTruthy();
-    expect(screen.getByLabelText('边距')).toBeTruthy();
-  });
-
-  it('disables expand toggle when minimised', () => {
-    const state = createState(ViewMode.Minimised);
-    const setGlobalState = vi.fn();
-
-    vi.mocked(useGlobalState).mockReturnValue([state, setGlobalState, {}] as never);
-
-    render(<Settings />);
-
-    const expandToggle = screen.getByLabelText<HTMLInputElement>('展开');
-    expect(expandToggle.disabled).toBe(true);
-    expect(screen.getByTestId('toggle-description').textContent).toBe(
-      '最小化时无法展开，请先还原窗口',
-    );
-  });
-
-  it('allows editing pip settings while minimised without changing viewMode', () => {
-    let state = createState(ViewMode.Minimised);
-    const setGlobalState = vi.fn((updater: (s: typeof state) => typeof state) => {
-      state = updater(state);
-    });
-
-    vi.mocked(useGlobalState).mockReturnValue([state, setGlobalState, {}] as never);
-
-    render(<Settings />);
-
-    fireEvent.change(screen.getByLabelText('位置'), {
-      target: { value: String(Position.Bottom) },
-    });
-    expect(state.position).toBe(Position.Bottom);
-    expect(state.viewMode).toBe(ViewMode.Minimised);
-
-    fireEvent.change(screen.getByLabelText('大小'), { target: { value: '1.3' } });
-    expect(state.size).toBe(1.3);
-    expect(state.viewMode).toBe(ViewMode.Minimised);
-
-    fireEvent.change(screen.getByLabelText('边距'), { target: { value: '45' } });
-    expect(state.margin).toBe(45);
-    expect(state.viewMode).toBe(ViewMode.Minimised);
-  });
-
-  it('shows Control Bar toggle in picture mode', () => {
-    let state = createState(ViewMode.Picture);
-    const setGlobalState = vi.fn((updater: (s: typeof state) => typeof state) => {
-      state = updater(state);
-    });
-
-    vi.mocked(useGlobalState).mockReturnValue([state, setGlobalState, {}] as never);
-
-    render(<Settings />);
-
-    const toggle = screen.getByLabelText<HTMLInputElement>('控制栏');
-    expect(toggle).toBeTruthy();
-    expect(toggle.checked).toBe(true);
-
-    fireEvent.click(toggle);
-    expect(state.controlBar).toBe(false);
-  });
-
-  it('hides Control Bar toggle when minimised', () => {
-    const state = createState(ViewMode.Minimised);
-    const setGlobalState = vi.fn();
-
-    vi.mocked(useGlobalState).mockReturnValue([state, setGlobalState, {}] as never);
-
-    render(<Settings />);
-
-    expect(screen.queryByLabelText('控制栏')).toBeNull();
-  });
-
-  it('updates view position and slider values in picture mode', () => {
-    let state = createState(ViewMode.Picture);
-    const setGlobalState = vi.fn((updater: (s: typeof state) => typeof state) => {
-      state = updater(state);
-    });
-
-    vi.mocked(useGlobalState).mockReturnValue([state, setGlobalState, {}] as never);
-
-    render(<Settings />);
-
-    fireEvent.click(screen.getByText('Open 位置'));
-    // Native menu visibility is handled by PortalView, including B/cancel.
-    expect(state.visible).toBe(true);
-
-    fireEvent.change(screen.getByLabelText('位置'), {
-      target: { value: String(Position.Bottom) },
-    });
-    expect(state.position).toBe(Position.Bottom);
-    expect(state.viewMode).toBe(ViewMode.Picture);
-
-    fireEvent.change(screen.getByLabelText('大小'), { target: { value: '1.3' } });
-    expect(state.size).toBe(1.3);
-
-    fireEvent.change(screen.getByLabelText('边距'), { target: { value: '45' } });
-    expect(state.margin).toBe(45);
   });
 });
