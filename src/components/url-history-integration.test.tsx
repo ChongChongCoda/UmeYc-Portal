@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ComponentProps, ReactNode } from 'react';
-import { UrlHistoryModal } from './url-history-modal';
+import { UrlModal } from './url-modal';
 import { useGlobalState } from '../hooks/global-state';
 import { prepareLocalFileMock } from '../__mocks__/decky-api';
 import {
@@ -14,20 +14,27 @@ import { toLocalFileUrl } from '../lib/local-files';
 
 vi.mock('../hooks/global-state', () => ({ useGlobalState: vi.fn() }));
 vi.mock('@decky/ui', () => ({
+  TextField: ({
+    value,
+    onChange,
+  }: {
+    value: string;
+    onChange: ComponentProps<'input'>['onChange'];
+  }) => <input aria-label="url" value={value} onChange={onChange} />,
   DialogButton: (props: ComponentProps<'button'>) => <button {...props} />,
   Focusable: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
 vi.mock('./panel-dialog', () => ({
-  PanelDialog: ({ children, onOK }: { children: ReactNode; onOK: () => void }) => (
+  PanelDialog: ({ children, onCancel }: { children: ReactNode; onCancel: () => void }) => (
     <div>
-      <button onClick={onOK}>关闭</button>
+      <button onClick={onCancel}>关闭</button>
       {children}
     </div>
   ),
 }));
 
-describe('browsing history picker', () => {
+describe('history in the unified webpage panel', () => {
   let state: { url: string; visible: boolean };
   beforeEach(() => {
     state = { url: 'https://current.example/', visible: true };
@@ -42,7 +49,7 @@ describe('browsing history picker', () => {
 
   it('shows empty history and restores the page on close', () => {
     const close = vi.fn();
-    const { unmount } = render(<UrlHistoryModal closeModal={close} />);
+    const { unmount } = render(<UrlModal closeModal={close} />);
     expect(screen.getByText('还没有浏览记录。')).toBeTruthy();
     expect(state.visible).toBe(false);
     fireEvent.click(screen.getByText('关闭'));
@@ -55,7 +62,7 @@ describe('browsing history picker', () => {
     rememberUrl(localStorage, 'https://recent.example/');
     rememberPageTitle(localStorage, 'https://recent.example/', '攻略网页标题');
     const close = vi.fn();
-    const { unmount } = render(<UrlHistoryModal closeModal={close} />);
+    const { unmount } = render(<UrlModal closeModal={close} />);
     expect(screen.getByText('攻略网页标题')).toBeTruthy();
     expect(screen.queryByText('https://recent.example/')).toBeNull();
     await act(async () => fireEvent.click(screen.getByRole('button', { name: '打开历史记录 1' })));
@@ -68,7 +75,7 @@ describe('browsing history picker', () => {
     const path = '/run/media/deck/SD/第一章攻略.JPG';
     rememberUrl(localStorage, toLocalFileUrl(path));
     const close = vi.fn();
-    const { unmount } = render(<UrlHistoryModal closeModal={close} />);
+    const { unmount } = render(<UrlModal closeModal={close} />);
     expect(screen.getByText('第一章攻略.JPG')).toBeTruthy();
     await act(async () => fireEvent.click(screen.getByRole('button', { name: '打开历史记录 1' })));
     expect(prepareLocalFileMock).toHaveBeenCalledWith(path);
@@ -80,7 +87,7 @@ describe('browsing history picker', () => {
   it('keeps the current page when the SD card file is missing', async () => {
     rememberUrl(localStorage, '/run/media/deck/SD/攻略.JPG');
     prepareLocalFileMock.mockRejectedValueOnce(new Error('请插入 SD 卡'));
-    const { unmount } = render(<UrlHistoryModal closeModal={vi.fn()} />);
+    const { unmount } = render(<UrlModal closeModal={vi.fn()} />);
     await act(async () => fireEvent.click(screen.getByRole('button', { name: '打开历史记录 1' })));
     expect(screen.getByRole('alert')).toHaveTextContent('请插入 SD 卡');
     expect(state.url).toBe('https://current.example/');
@@ -96,7 +103,7 @@ describe('browsing history picker', () => {
           resolve = done;
         }),
     );
-    const { unmount } = render(<UrlHistoryModal closeModal={vi.fn()} />);
+    const { unmount } = render(<UrlModal closeModal={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: '打开历史记录 1' }));
     unmount();
     await act(async () => {
@@ -110,7 +117,7 @@ describe('browsing history picker', () => {
     rememberPageTitle(localStorage, 'https://first.example/', '第一条');
     rememberUrl(localStorage, '/tmp/中文图片.JPG');
     const close = vi.fn();
-    render(<UrlHistoryModal closeModal={close} />);
+    render(<UrlModal closeModal={close} />);
     fireEvent.click(screen.getByRole('button', { name: '删除历史记录 2' }));
     expect(screen.queryByText('第一条')).toBeNull();
     expect(getUrlHistory(localStorage)).toEqual([

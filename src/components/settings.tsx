@@ -80,15 +80,6 @@ export const Settings = () => {
           <ButtonItem
             layout="below"
             bottomSeparator="standard"
-            onClick={() => setGlobalState((state) => ({ ...state, activePanel: 'history' }))}
-          >
-            历史记录
-          </ButtonItem>
-        </PanelSectionRow>
-        <PanelSectionRow>
-          <ButtonItem
-            layout="below"
-            bottomSeparator="standard"
             onClick={() => setGlobalState((state) => ({ ...state, activePanel: 'phone' }))}
           >
             扫码传送

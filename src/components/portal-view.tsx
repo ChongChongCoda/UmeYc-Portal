@@ -12,7 +12,6 @@ import { WebHeader, WEB_HEADER_HEIGHT } from './web-header';
 import { rememberPageTitle, rememberUrl, removeUrl } from '../lib/url-history';
 import { UrlModal } from './url-modal';
 import { PhoneUrlModal } from './phone-url-modal';
-import { UrlHistoryModal } from './url-history-modal';
 import { LocalFilesModal } from './local-files-modal';
 import { SCREEN_HEIGHT, SCREEN_WIDTH, ViewMode } from '../lib/util';
 
@@ -426,9 +425,7 @@ export const PortalView = () => {
   const closePanel = () =>
     setGlobalState((state) => ({ ...state, activePanel: undefined, visible: true }));
   const Panel = activePanel
-    ? { url: UrlModal, phone: PhoneUrlModal, history: UrlHistoryModal, files: LocalFilesModal }[
-        activePanel
-      ]
+    ? { url: UrlModal, phone: PhoneUrlModal, files: LocalFilesModal }[activePanel]
     : undefined;
   const localPath = (() => {
     try {

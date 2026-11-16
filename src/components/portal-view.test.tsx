@@ -16,7 +16,6 @@ vi.mock('../lib/menu-state', () => ({
 vi.mock('./reader-input', () => ({ ReaderInput: () => <div data-testid="reader-input" /> }));
 vi.mock('./url-modal', () => ({ UrlModal: () => <div>url panel</div> }));
 vi.mock('./phone-url-modal', () => ({ PhoneUrlModal: () => <div>phone panel</div> }));
-vi.mock('./url-history-modal', () => ({ UrlHistoryModal: () => <div>history panel</div> }));
 vi.mock('./local-files-modal', () => ({ LocalFilesModal: () => <div>files panel</div> }));
 
 import { PortalView, PortalViewOuter } from './portal-view';
@@ -113,7 +112,7 @@ describe('PortalView and PortalViewOuter', () => {
     },
   });
 
-  it.each(['url', 'phone', 'history', 'files'] as const)(
+  it.each(['url', 'phone', 'files'] as const)(
     'shows %s only in the left reader area while keeping QAM open',
     (activePanel) => {
       getGamepadNavigationTrees.mockReturnValue([qamTree()]);

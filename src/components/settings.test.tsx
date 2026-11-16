@@ -178,7 +178,7 @@ describe('Settings', () => {
     expect(state.viewMode).toBe(ViewMode.Closed);
   });
 
-  it('keeps the URL below its label and puts plain history and QR buttons on separate rows', () => {
+  it('keeps the webpage title as the unified entry and QR on its own row', () => {
     const state = {
       ...createState(ViewMode.Sidebar),
       url: 'https://example.com/' + 'guide/'.repeat(50),
@@ -199,9 +199,8 @@ describe('Settings', () => {
     const qr = screen.getByRole('button', { name: '扫码传送' });
     expect(qr.textContent).toBe('扫码传送');
     expect(qr.querySelector('svg')).toBeNull();
-    const history = screen.getByRole('button', { name: '历史记录' });
-    expect(history.querySelector('svg')).toBeNull();
-    expect(qr.parentElement).not.toBe(history.parentElement);
+    expect(screen.queryByRole('button', { name: '历史记录' })).toBeNull();
+    expect(qr.parentElement).not.toBe(edit.parentElement);
     expect(edit).toHaveStyle({ width: '100%' });
     expect(edit.contains(qr)).toBe(false);
     fireEvent.click(qr);
@@ -210,7 +209,7 @@ describe('Settings', () => {
     expect(state.url).toBe('https://example.com/' + 'guide/'.repeat(50));
   });
 
-  it('shows the Chinese local filename and opens the history picker', () => {
+  it('shows the Chinese local filename and opens the unified page panel', () => {
     const state = {
       ...createState(ViewMode.Sidebar),
       url: 'file:///run/media/deck/SD/%E4%B8%AD%E6%96%87%E6%94%BB%E7%95%A5.JPG',
@@ -219,8 +218,8 @@ describe('Settings', () => {
     render(<Settings />);
     expect(screen.getByRole('button', { name: '编辑网页' })).toHaveTextContent('中文攻略.JPG');
     expect(screen.queryByText(state.url)).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '历史记录' }));
+    fireEvent.click(screen.getByRole('button', { name: '编辑网页' }));
     const setter = vi.mocked(vi.mocked(useGlobalState).mock.results.slice(-1)[0].value[1]);
-    expect(setter.mock.calls.slice(-1)[0][0](state).activePanel).toBe('history');
+    expect(setter.mock.calls.slice(-1)[0][0](state).activePanel).toBe('url');
   });
 });

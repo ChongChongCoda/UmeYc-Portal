@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import type { ReactNode, ComponentProps } from 'react';
 
 import { UrlModal } from './url-modal';
 import { useGlobalState } from '../hooks/global-state';
@@ -11,6 +11,8 @@ vi.mock('../hooks/global-state', () => ({
 }));
 
 vi.mock('@decky/ui', () => ({
+  DialogButton: (props: ComponentProps<'button'>) => <button {...props} />,
+  Focusable: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   TextField: ({ value, onChange }: { value: string; onChange: (e: unknown) => void }) => (
     <input aria-label="url" value={value} onChange={onChange} />
   ),

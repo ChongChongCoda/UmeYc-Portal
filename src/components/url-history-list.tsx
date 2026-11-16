@@ -1,53 +1,21 @@
-import { DialogButton, Focusable, ModalRootProps } from '@decky/ui';
-import { PanelDialog } from './panel-dialog';
+import { DialogButton, Focusable } from '@decky/ui';
 import { FaTrashAlt } from 'react-icons/fa';
-import { useEffect, useState } from 'react';
-import { useGlobalState } from '../hooks/global-state';
-import { editableAddress, localPathFromUrl, prepareLocalFile } from '../lib/local-files';
+import { useState } from 'react';
+import { editableAddress } from '../lib/local-files';
 import { getUrlHistory, historyLabel, removeUrl, URL_HISTORY_LIMIT } from '../lib/url-history';
-import { modalWithState } from './modal';
 
-export const UrlHistoryModal = (props: ModalRootProps) => {
-  const [, setGlobalState] = useGlobalState();
+export const UrlHistoryList = ({
+  opening,
+  onOpen,
+}: {
+  opening: boolean;
+  onOpen(url: string): void;
+}) => {
   const [history, setHistory] = useState(() => getUrlHistory(localStorage));
   const [error, setError] = useState('');
-  const [opening, setOpening] = useState(false);
-  const [lifetime] = useState(() => ({ active: true }));
-
-  useEffect(() => {
-    lifetime.active = true;
-    setGlobalState((state) => ({ ...state, visible: false }));
-    return () => {
-      lifetime.active = false;
-      setGlobalState((state) => ({ ...state, visible: true }));
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const open = async (url: string) => {
-    setOpening(true);
-    setError('');
-    try {
-      const path = localPathFromUrl(url);
-      if (path) await prepareLocalFile(path);
-      if (!lifetime.active) return;
-      setGlobalState((state) => ({ ...state, url, visible: true }));
-      props.closeModal?.();
-    } catch (cause) {
-      if (lifetime.active) setError(`无法打开历史记录：${String(cause)}`);
-    } finally {
-      if (lifetime.active) setOpening(false);
-    }
-  };
-
   return (
-    <PanelDialog
-      {...props}
-      strTitle={`浏览历史（最近 ${URL_HISTORY_LIMIT} 条）`}
-      strOKButtonText="关闭"
-      bAlertDialog
-      onOK={() => props.closeModal?.()}
-    >
+    <section aria-label="最近浏览">
+      <div style={{ fontSize: 14, marginBottom: 10 }}>最近浏览（最多 {URL_HISTORY_LIMIT} 条）</div>
       {history.length === 0 && <p>还没有浏览记录。</p>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {history.map((url, index) => (
@@ -55,7 +23,7 @@ export const UrlHistoryModal = (props: ModalRootProps) => {
             <DialogButton
               aria-label={`打开历史记录 ${index + 1}`}
               disabled={opening}
-              onClick={() => void open(url)}
+              onClick={() => onOpen(url)}
               style={{ flex: '1 1 0', minWidth: 0, textAlign: 'left', padding: '10px 12px' }}
             >
               <span
@@ -87,8 +55,6 @@ export const UrlHistoryModal = (props: ModalRootProps) => {
         ))}
       </div>
       {error && <p role="alert">{error}</p>}
-    </PanelDialog>
+    </section>
   );
 };
-
-export const UrlHistoryModalWithState = modalWithState(UrlHistoryModal);
