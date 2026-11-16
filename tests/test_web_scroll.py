@@ -73,3 +73,37 @@ class WebScrollTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(RuntimeError):
             await self.scroller.scroll("https://guide.example/", 0, 1, 506, 534)
         self.assertIsNone(self.scroller._socket)
+
+    async def test_zoom_runs_only_on_matching_page_and_resets_native_pinch(self):
+        self.socket.receive_json.side_effect = [
+            {"id": 1, "result": {"result": {"value": {"factor": 0.833333}}}},
+            {"id": 2, "result": {}},
+        ]
+        result = await self.scroller.zoom("https://guide.example/", "smaller")
+        self.assertAlmostEqual(result["factor"], 0.833333)
+        calls = [call.args[0] for call in self.socket.send_json.call_args_list]
+        self.assertEqual(calls[0]["method"], "Runtime.evaluate")
+        self.assertIn('const action = "smaller"', calls[0]["params"]["expression"])
+        self.assertEqual(calls[1]["method"], "Emulation.setPageScaleFactor")
+        self.assertEqual(calls[1]["params"], {"pageScaleFactor": 1})
+
+    async def test_invalid_zoom_action_cannot_evaluate_script(self):
+        with self.assertRaises(ValueError):
+            await self.scroller.zoom("https://guide.example/", "script injection")
+        self.connection.assert_not_called()
+
+    async def test_script_exception_is_reported_and_disconnects(self):
+        self.socket.receive_json.return_value = {"id": 1, "result": {"exceptionDetails": {}}}
+        with self.assertRaises(RuntimeError):
+            await self.scroller.zoom("https://guide.example/", "default")
+        self.assertIsNone(self.scroller._socket)
+
+    def test_query_rewrite_matches_only_a_unique_same_origin_path(self):
+        original = "https://www.bilibili.com/video/BV123/?share=abc"
+        rewritten = {"type": "page", "url": original + "&p=1"}
+        unrelated = {"type": "page", "url": "https://other.example/video/BV123/?share=abc"}
+        self.assertEqual(self.scroller._matching_pages([rewritten, unrelated], original), [rewritten])
+        second = {"type": "page", "url": original + "&p=2"}
+        self.assertEqual(len(self.scroller._matching_pages([rewritten, second], original)), 2)
+        exact = {"type": "page", "url": original}
+        self.assertEqual(self.scroller._matching_pages([exact, rewritten], original), [exact])

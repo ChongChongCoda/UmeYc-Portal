@@ -8,7 +8,8 @@
   body { margin: 0; background: #171a21; color: #fff; font: 14px sans-serif; }
   header { position: sticky; top: 0; height: 34px; display: flex; align-items: center; gap: 4px; padding: 2px 6px; background: #252b35; z-index: 1; }
   header span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
-  button { min-width: 32px; height: 28px; border: 0; border-radius: 4px; background: #435268; color: white; font-size: 14px; }
+  button { display: flex; align-items: center; justify-content: center; min-width: 32px; height: 28px; padding: 4px; border: 0; border-radius: 4px; background: #435268; color: white; font-size: 14px; }
+  button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   button:focus-visible { outline: 2px solid #80cfff; }
   main { height: calc(100vh - 34px); overflow: auto; overscroll-behavior: contain; }
   img { display: block; width: 100%; height: auto; max-width: none; }
@@ -16,9 +17,9 @@
 </style>
 <header>
   <span>{{TITLE}}</span>
-  <button id="smaller" aria-label="缩小">−</button>
-  <button id="fit" aria-label="适合宽度">适宽</button>
-  <button id="larger" aria-label="放大">＋</button>
+  <button id="smaller" aria-label="缩小" title="缩小"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{ICON_SMALLER}}"/></svg></button>
+  <button id="fit" aria-label="默认" title="默认（适宽）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{ICON_DEFAULT}}"/></svg></button>
+  <button id="larger" aria-label="放大" title="放大"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{ICON_LARGER}}"/></svg></button>
 </header>
 <main data-token="{{TOKEN}}" data-state="{{STATE}}"><img id="guide" src="/file/{{TOKEN}}" alt="{{TITLE}}"><p id="error">图片无法读取，请检查 SD 卡后重新选择文件。</p></main>
 <script src="/script/{{TOKEN}}"></script>

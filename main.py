@@ -145,7 +145,11 @@ class PreviewHandler(BaseHTTPRequestHandler):
                     "{{TITLE}}", html.escape(path.name)
                 ).replace("{{TOKEN}}", token).replace(
                     "{{STATE}}", html.escape(json.dumps(state), quote=True)
-                ).encode("utf-8")
+                )
+                icons = json.loads(template.with_name("zoom-icons.json").read_text())
+                for key, icon in icons.items():
+                    content = content.replace("{{ICON_" + key.upper() + "}}", html.escape(icon, quote=True))
+                content = content.encode("utf-8")
                 self._headers("text/html; charset=utf-8", len(content))
                 if not head:
                     self.wfile.write(content)
@@ -268,6 +272,9 @@ class Plugin:
 
     async def release_web_scroll(self):
         await self._web_scroller.close()
+
+    async def zoom_web_page(self, url: str, action: str):
+        return await self._web_scroller.zoom(url, action)
 
     async def send_web_space(self, url: str):
         await self._web_scroller.space(url)

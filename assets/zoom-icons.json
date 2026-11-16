@@ -1,0 +1,5 @@
+{
+  "smaller": "M5 12h14",
+  "default": "M3 10a9 9 0 1 1 2 8M3 4v6h6",
+  "larger": "M12 5v14M5 12h14"
+}

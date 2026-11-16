@@ -19,6 +19,7 @@ export const prepareLocalFileMock = vi.fn();
 export const setReaderMotionMock = vi.fn(async () => undefined);
 export const scrollWebPageMock = vi.fn(async () => undefined);
 export const releaseWebScrollMock = vi.fn(async () => undefined);
+export const zoomWebPageMock = vi.fn(async () => ({ factor: 1 }));
 export const sendWebSpaceMock = vi.fn(async (): Promise<void> => undefined);
 export const startUrlInputMock = vi.fn();
 export const getUrlInputStatusMock = vi.fn();
@@ -28,6 +29,7 @@ export const callable = vi.fn((route: string) => {
     set_reader_motion: setReaderMotionMock,
     scroll_web_page: scrollWebPageMock,
     release_web_scroll: releaseWebScrollMock,
+    zoom_web_page: zoomWebPageMock,
     send_web_space: sendWebSpaceMock,
     prepare_local_file: prepareLocalFileMock,
     start_url_input: startUrlInputMock,

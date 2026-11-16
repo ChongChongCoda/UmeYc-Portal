@@ -8,6 +8,7 @@ import { UIComposition, useUIComposition } from '../hooks/use-ui-composition';
 import { localPathFromUrl, prepareLocalFile } from '../lib/local-files';
 import { getOpenSideMenu, isVirtualKeyboardShowing } from '../lib/menu-state';
 import { ReaderInput } from './reader-input';
+import { WebHeader, WEB_HEADER_HEIGHT } from './web-header';
 import { SCREEN_HEIGHT, SCREEN_WIDTH, ViewMode } from '../lib/util';
 
 interface BrowserProps {
@@ -21,6 +22,7 @@ interface BrowserProps {
   sidebarOpen?: boolean;
   playbackSpace?: boolean;
   suppressPlayback?: boolean;
+  pageTitle?: string;
 }
 
 interface BrowserHandle {
@@ -33,6 +35,7 @@ interface BrowserViewHandle {
   LoadURL(url: string): void;
   Destroy(): void;
   URL?: string;
+  Title?: string;
 }
 
 interface MainWindowInstance {
@@ -82,8 +85,10 @@ const Browser = ({
   sidebarOpen,
   playbackSpace,
   suppressPlayback,
+  pageTitle,
 }: BrowserProps) => {
   useUIComposition(UIComposition.Notification);
+  const web = /^https?:\/\//i.test(url);
 
   const [handles] = useState<{ browser: BrowserHandle; view: BrowserViewHandle } | null>(() => {
     const root = Router.WindowStore?.GamepadUIMainWindowInstance as
@@ -171,14 +176,27 @@ const Browser = ({
 
   useEffect(() => {
     if (preserveHiddenBounds && !visible) return;
-    handles?.browser.SetBounds(x, y, width, height);
-  }, [handles, x, y, width, height, preserveHiddenBounds, visible]);
+    handles?.browser.SetBounds(
+      x,
+      y + (web ? WEB_HEADER_HEIGHT : 0),
+      width,
+      Math.max(1, height - (web ? WEB_HEADER_HEIGHT : 0)),
+    );
+  }, [handles, x, y, width, height, preserveHiddenBounds, visible, web]);
 
   useEffect(() => {
     return () => handles?.view.Destroy();
   }, [handles]);
 
-  return null;
+  return web && visible && handles ? (
+    <WebHeader
+      title={pageTitle || ''}
+      getUrl={() => handles.view.URL || url}
+      x={x}
+      y={y}
+      width={width}
+    />
+  ) : null;
 };
 
 const getBounds = (windowView?: DeckWindow | null) => {
@@ -259,6 +277,7 @@ const getDeckComponentBounds = () => {
     virtualKeyboard: virtualKeyboardBounds,
     qamOpen: !qamHidden,
     dropdownOpen,
+    pageTitle: (window as unknown as { portal?: BrowserViewHandle }).portal?.Title,
   };
 };
 
@@ -291,7 +310,8 @@ const areDeckComponentBoundsEqual = (
     areRectanglesEqual(first.qam, second.qam) &&
     areRectanglesEqual(first.virtualKeyboard, second.virtualKeyboard) &&
     first.qamOpen === second.qamOpen &&
-    first.dropdownOpen === second.dropdownOpen
+    first.dropdownOpen === second.dropdownOpen &&
+    first.pageTitle === second.pageTitle
   );
 };
 
@@ -313,7 +333,7 @@ const useDeckComponentBounds = () => {
 };
 
 export const PortalView = () => {
-  const { nav, qam, virtualKeyboard, qamOpen, dropdownOpen } = useDeckComponentBounds();
+  const { nav, qam, virtualKeyboard, qamOpen, dropdownOpen, pageTitle } = useDeckComponentBounds();
   const [{ url, visible, sidebarVideoSpace }] = useGlobalState();
   const readerVisible = visible && !dropdownOpen && qamOpen;
   const localPath = (() => {
@@ -380,6 +400,7 @@ export const PortalView = () => {
         sidebarOpen={qamOpen}
         playbackSpace={sidebarVideoSpace === true && /^https?:\/\//i.test(url)}
         suppressPlayback={dropdownOpen}
+        pageTitle={pageTitle}
       />
       {readerVisible && <ReaderInput path={localPath ?? undefined} />}
     </>

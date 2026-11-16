@@ -29,7 +29,11 @@ class LocalPreviewTests(unittest.IsolatedAsyncioTestCase):
         with urlopen(url) as response:
             page = response.read().decode()
             self.assertIn("攻略 #1? &lt;上&gt;.JPG", page)
-            self.assertIn("适宽", page)
+            self.assertIn('aria-label="默认"', page)
+            self.assertNotIn('{{ICON_', page)
+            icons = json.loads((Path(__file__).resolve().parent.parent / 'assets/zoom-icons.json').read_text())
+            for icon in icons.values():
+                self.assertIn(icon, page)
             self.assertEqual(response.headers["Cache-Control"], "no-store")
         file_url = url.replace("/viewer/", "/file/")
         with urlopen(file_url) as response:

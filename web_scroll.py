@@ -2,6 +2,8 @@
 
 import asyncio
 import math
+import json
+from pathlib import Path
 from urllib.parse import urlsplit
 
 
@@ -32,7 +34,7 @@ class WebScroller:
         async with self._client.get("http://127.0.0.1:8080/json") as response:
             response.raise_for_status()
             pages = await response.json()
-        matches = [page for page in pages if page.get("url") == url and page.get("type") == "page"]
+        matches = self._matching_pages(pages, url)
         if len(matches) != 1:
             raise ValueError("无法唯一识别 Portal 网页，请重新打开网址后重试")
         endpoint = urlsplit(matches[0]["webSocketDebuggerUrl"])
@@ -40,6 +42,20 @@ class WebScroller:
             raise ValueError("Invalid browser debugger endpoint")
         self._socket = await self._client.ws_connect(matches[0]["webSocketDebuggerUrl"])
         self._url = url
+
+    @staticmethod
+    def _matching_pages(pages, url):
+        matches = [page for page in pages if page.get("url") == url and page.get("type") == "page"]
+        if matches:
+            return matches
+        # pushState/replaceState can change query parameters without notifying
+        # Steam's BrowserView. Only accept a unique page at the same origin/path.
+        target = urlsplit(url)
+        def route(address):
+            parsed = urlsplit(address)
+            return parsed.scheme, parsed.netloc, parsed.path
+        return [page for page in pages if page.get("type") == "page" and
+                route(page.get("url", "")) == route(target.geturl())]
 
     async def scroll(self, url, x, y, width, height):
         self._validate_url(url)
@@ -59,6 +75,26 @@ class WebScroller:
         if address.scheme not in {"http", "https"} or not address.hostname or address.hostname == "steamloopback.host":
             raise ValueError("Only a web page can be scrolled")
 
+    async def zoom(self, url, action):
+        self._validate_url(url)
+        if action not in {"smaller", "default", "larger"}:
+            raise ValueError("Invalid zoom action")
+        return await self._run(self._zoom(url, action))
+
+    async def _zoom(self, url, action):
+        await self._ensure_page(url)
+        expression = Path(__file__).with_name("assets").joinpath("web-zoom.js").read_text().replace(
+            "__PORTAL_ZOOM_ACTION__", json.dumps(action)
+        )
+        result = await self._request("Runtime.evaluate", {"expression": expression, "returnByValue": True})
+        if "exceptionDetails" in result:
+            raise RuntimeError("Unable to zoom this web page")
+        value = result.get("result", {}).get("value")
+        if not isinstance(value, dict) or not isinstance(value.get("factor"), (float, int)):
+            raise RuntimeError("No page zoom result")
+        await self._request("Emulation.setPageScaleFactor", {"pageScaleFactor": 1})
+        return value
+
     async def space(self, url):
         self._validate_url(url)
         await self._run(self._space(url))
@@ -66,7 +102,7 @@ class WebScroller:
     async def _run(self, operation):
         async with self._lock:
             try:
-                await asyncio.wait_for(operation, timeout=2)
+                return await asyncio.wait_for(operation, timeout=2)
             except BaseException:
                 await self._disconnect()
                 raise
@@ -102,4 +138,4 @@ class WebScroller:
             if result.get("id") == self._sequence:
                 if "error" in result:
                     raise RuntimeError("Browser input event was rejected")
-                break
+                return result.get("result", {})

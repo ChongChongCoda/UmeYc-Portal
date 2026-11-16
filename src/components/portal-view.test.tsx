@@ -293,7 +293,7 @@ describe('PortalView and PortalViewOuter', () => {
     vi.mocked(getOpenSideMenu).mockReturnValue(2);
     vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
     render(<PortalView />);
-    expect(setBounds).toHaveBeenLastCalledWith(0, 0, 506, 534);
+    expect(setBounds).toHaveBeenLastCalledWith(0, 34, 506, 500);
   });
 
   it('ignores a retained keyboard navigation tree after the keyboard is dismissed', () => {
@@ -308,7 +308,7 @@ describe('PortalView and PortalViewOuter', () => {
     vi.mocked(isVirtualKeyboardShowing).mockReturnValue(false);
     vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
     render(<PortalView />);
-    expect(setBounds).toHaveBeenLastCalledWith(0, 0, 534, 534);
+    expect(setBounds).toHaveBeenLastCalledWith(0, 34, 534, 500);
   });
 
   it('keeps sidebar height after a physical touch clears Steam focus', async () => {
@@ -339,18 +339,18 @@ describe('PortalView and PortalViewOuter', () => {
       ]);
       vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
       const { unmount } = render(<PortalView />);
-      expect(setBounds).toHaveBeenLastCalledWith(0, 0, 534, 534);
+      expect(setBounds).toHaveBeenLastCalledWith(0, 34, 534, 500);
       focused = null;
       act(() => vi.advanceTimersByTime(100));
-      expect(setBounds).toHaveBeenLastCalledWith(0, 0, 534, 534);
+      expect(setBounds).toHaveBeenLastCalledWith(0, 34, 534, 500);
       expect(setBounds).toHaveBeenCalledTimes(1);
 
       main.VirtualKeyboardManager.IsShowingVirtualKeyboard.Value = true;
       act(() => vi.advanceTimersByTime(100));
-      expect(setBounds).toHaveBeenLastCalledWith(0, 0, 534, 294);
+      expect(setBounds).toHaveBeenLastCalledWith(0, 34, 534, 260);
       main.VirtualKeyboardManager.IsShowingVirtualKeyboard.Value = false;
       act(() => vi.advanceTimersByTime(100));
-      expect(setBounds).toHaveBeenLastCalledWith(0, 0, 534, 534);
+      expect(setBounds).toHaveBeenLastCalledWith(0, 34, 534, 500);
 
       menu = 0;
       act(() => vi.advanceTimersByTime(100));
@@ -358,7 +358,7 @@ describe('PortalView and PortalViewOuter', () => {
       menu = 2;
       act(() => vi.advanceTimersByTime(100));
       expect(setVisible).toHaveBeenLastCalledWith(true);
-      expect(setBounds).toHaveBeenLastCalledWith(0, 0, 534, 534);
+      expect(setBounds).toHaveBeenLastCalledWith(0, 34, 534, 500);
       expect(createBrowserView).toHaveBeenCalledTimes(1);
       unmount();
     } finally {
@@ -521,10 +521,10 @@ describe('PortalView and PortalViewOuter', () => {
         createState(mode, Position.BottomRight, 60),
       ] as never);
       const { container } = render(<PortalView />);
-      expect(setBounds).toHaveBeenLastCalledWith(0, 0, 534, 534);
+      expect(setBounds).toHaveBeenLastCalledWith(0, 34, 534, 500);
       expect(setVisible).toHaveBeenLastCalledWith(true);
       expect(container.querySelector('[data-testid="reader-input"]')).toBeTruthy();
-      expect(container.querySelector('button')).toBeNull();
+      expect(container.querySelectorAll('button')).toHaveLength(3);
     },
   );
 
