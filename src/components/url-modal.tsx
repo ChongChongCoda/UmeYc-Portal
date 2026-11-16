@@ -25,7 +25,9 @@ export const UrlModal = (props: ModalRootProps) => {
   return (
     <ConfirmModal
       {...props}
-      strTitle="Address"
+      strTitle="攻略网址或图片地址"
+      strOKButtonText="确定"
+      strCancelButtonText="取消"
       onOK={() => {
         setGlobalState((state) => ({
           ...state,
@@ -40,7 +42,11 @@ export const UrlModal = (props: ModalRootProps) => {
         }));
       }}
     >
-      <TextField value={field} onChange={(e) => setField(e.target.value)} />
+      <TextField
+        description="输入攻略网页或图片地址；SD 卡上的图片请使用「本地文件」"
+        value={field}
+        onChange={(e) => setField(e.target.value)}
+      />
     </ConfirmModal>
   );
 };

@@ -40,7 +40,7 @@ export default definePlugin(() => {
 
   return {
     name: 'Portal',
-    titleView: <div className={quickAccessMenuClasses.Title}>Portal</div>,
+    titleView: <div className={quickAccessMenuClasses.Title}>Portal 悬浮浏览器</div>,
     icon: <FaTv />,
     content: (
       <GlobalContext.Provider value={state}>

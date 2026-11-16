@@ -42,5 +42,14 @@ jobs:
       - name: Run tests with coverage
         run: pnpm test:coverage
 
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
+
+      - name: Test local file preview backend
+        run: python3 -m unittest discover -s tests -v
+
       - name: Build
         run: pnpm build
+
+      - name: Package frontend and backend
+        run: python3 scripts/package.py

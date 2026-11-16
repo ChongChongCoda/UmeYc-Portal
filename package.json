@@ -1,7 +1,7 @@
 {
   "name": "decky-portal",
-  "version": "1.0.0",
-  "description": "A Decky plugin that adds a portable in-game web portal for streaming, browsing, and media playback.",
+  "version": "1.0.0-zh-cn.2",
+  "description": "Portal 悬浮浏览器：简体中文界面，支持在游戏模式选择本地攻略文件和预览长图。",
   "type": "module",
   "scripts": {
     "build": "rollup -c",
@@ -19,7 +19,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ajustinjames/decky-portal.git"
+    "url": "git+https://github.com/xiaochaom/UmeYc-Portal.git"
   },
   "keywords": [
     "decky",
@@ -37,9 +37,9 @@
   ],
   "license": "BSD-3-Clause",
   "bugs": {
-    "url": "https://github.com/ajustinjames/decky-portal/issues"
+    "url": "https://github.com/xiaochaom/UmeYc-Portal/issues"
   },
-  "homepage": "https://github.com/ajustinjames/decky-portal#readme",
+  "homepage": "https://github.com/xiaochaom/UmeYc-Portal#readme",
   "engines": {
     "node": ">=22.0.0",
     "pnpm": ">=9.0.0"

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { openFilePicker, prepareLocalFileMock, toaster } from '../__mocks__/decky-api';
+import { localPathFromUrl } from '../lib/local-files';
 import type { ReactNode } from 'react';
 
 import { Settings } from './settings';
@@ -132,6 +134,60 @@ const createState = (viewMode: ViewMode) => ({
 describe('Settings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it('opens an SD-card image and remembers its directory', async () => {
+    let state = createState(ViewMode.Picture);
+    const setGlobalState = vi.fn((updater: (s: typeof state) => typeof state) => {
+      state = updater(state);
+    });
+    vi.mocked(useGlobalState).mockReturnValue([state, setGlobalState, {}] as never);
+    const path = '/run/media/deck/SD/明末攻略/第一章 #1.JPG';
+    openFilePicker.mockResolvedValueOnce({ realpath: path, path });
+    prepareLocalFileMock.mockResolvedValueOnce({ url: 'http://127.0.0.1:1234/viewer/test' });
+    render(<Settings />);
+    fireEvent.click(screen.getByText('本地文件'));
+    await waitFor(() => expect(localPathFromUrl(state.url)).toBe(path));
+    expect(openFilePicker.mock.calls[0][1]).toBe('/run/media');
+    expect(state.visible).toBe(true);
+    expect(state.viewMode).toBe(ViewMode.Picture);
+    expect(localStorage.getItem('portal.localDirectory')).toBe('/run/media/deck/SD/明末攻略');
+  });
+
+  it('restores the page after cancellation without showing an error', async () => {
+    let state = createState(ViewMode.Picture);
+    vi.mocked(useGlobalState).mockReturnValue([
+      state,
+      (updater: (s: typeof state) => typeof state) => {
+        state = updater(state);
+      },
+      {},
+    ] as never);
+    openFilePicker.mockRejectedValueOnce('User canceled');
+    render(<Settings />);
+    fireEvent.click(screen.getByText('本地文件'));
+    await waitFor(() => expect(state.visible).toBe(true));
+    expect(state.url).toBe('https://netflix.com');
+    expect(toaster.toast).not.toHaveBeenCalled();
+  });
+
+  it('keeps the previous page when the selected file cannot be read', async () => {
+    let state = createState(ViewMode.Picture);
+    vi.mocked(useGlobalState).mockReturnValue([
+      state,
+      (updater: (s: typeof state) => typeof state) => {
+        state = updater(state);
+      },
+      {},
+    ] as never);
+    openFilePicker.mockResolvedValueOnce({ path: '/missing.JPG' });
+    prepareLocalFileMock.mockRejectedValueOnce(new Error('文件不存在'));
+    render(<Settings />);
+    fireEvent.click(screen.getByText('本地文件'));
+    await waitFor(() => expect(toaster.toast).toHaveBeenCalled());
+    expect(state.url).toBe('https://netflix.com');
+    expect(state.visible).toBe(true);
   });
 
   it('opens from closed state and can be closed again', () => {
@@ -144,7 +200,7 @@ describe('Settings', () => {
 
     render(<Settings />);
 
-    fireEvent.click(screen.getByText('Open'));
+    fireEvent.click(screen.getByText('打开'));
     expect(state.viewMode).toBe(ViewMode.Picture);
   });
 
@@ -158,13 +214,13 @@ describe('Settings', () => {
 
     render(<Settings />);
 
-    fireEvent.click(screen.getByText('Address'));
+    fireEvent.click(screen.getByText('网址'));
     expect(showModal).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByLabelText('Expand'));
+    fireEvent.click(screen.getByLabelText('展开'));
     expect(state.viewMode).toBe(ViewMode.Expand);
 
-    fireEvent.click(screen.getByText('Close'));
+    fireEvent.click(screen.getByText('关闭'));
     expect(state.viewMode).toBe(ViewMode.Closed);
   });
 
@@ -211,7 +267,7 @@ describe('Settings', () => {
 
     render(<Settings />);
 
-    expect(screen.getByText('Close')).toBeTruthy();
+    expect(screen.getByText('关闭')).toBeTruthy();
   });
 
   it('shows pip controls with minimised warning when minimised', () => {
@@ -222,10 +278,10 @@ describe('Settings', () => {
 
     render(<Settings />);
 
-    expect(screen.getByText(/Portal is minimised/)).toBeTruthy();
-    expect(screen.getByLabelText('View')).toBeTruthy();
-    expect(screen.getByLabelText('Size')).toBeTruthy();
-    expect(screen.getByLabelText('Margin')).toBeTruthy();
+    expect(screen.getByText(/窗口已最小化/)).toBeTruthy();
+    expect(screen.getByLabelText('位置')).toBeTruthy();
+    expect(screen.getByLabelText('大小')).toBeTruthy();
+    expect(screen.getByLabelText('边距')).toBeTruthy();
   });
 
   it('disables expand toggle when minimised', () => {
@@ -236,10 +292,10 @@ describe('Settings', () => {
 
     render(<Settings />);
 
-    const expandToggle = screen.getByLabelText<HTMLInputElement>('Expand');
+    const expandToggle = screen.getByLabelText<HTMLInputElement>('展开');
     expect(expandToggle.disabled).toBe(true);
     expect(screen.getByTestId('toggle-description').textContent).toBe(
-      'Unavailable while minimised',
+      '最小化时无法展开，请先还原窗口',
     );
   });
 
@@ -253,17 +309,17 @@ describe('Settings', () => {
 
     render(<Settings />);
 
-    fireEvent.change(screen.getByLabelText('View'), {
+    fireEvent.change(screen.getByLabelText('位置'), {
       target: { value: String(Position.Bottom) },
     });
     expect(state.position).toBe(Position.Bottom);
     expect(state.viewMode).toBe(ViewMode.Minimised);
 
-    fireEvent.change(screen.getByLabelText('Size'), { target: { value: '1.3' } });
+    fireEvent.change(screen.getByLabelText('大小'), { target: { value: '1.3' } });
     expect(state.size).toBe(1.3);
     expect(state.viewMode).toBe(ViewMode.Minimised);
 
-    fireEvent.change(screen.getByLabelText('Margin'), { target: { value: '45' } });
+    fireEvent.change(screen.getByLabelText('边距'), { target: { value: '45' } });
     expect(state.margin).toBe(45);
     expect(state.viewMode).toBe(ViewMode.Minimised);
   });
@@ -278,7 +334,7 @@ describe('Settings', () => {
 
     render(<Settings />);
 
-    const toggle = screen.getByLabelText<HTMLInputElement>('Control Bar');
+    const toggle = screen.getByLabelText<HTMLInputElement>('控制栏');
     expect(toggle).toBeTruthy();
     expect(toggle.checked).toBe(true);
 
@@ -294,7 +350,7 @@ describe('Settings', () => {
 
     render(<Settings />);
 
-    expect(screen.queryByLabelText('Control Bar')).toBeNull();
+    expect(screen.queryByLabelText('控制栏')).toBeNull();
   });
 
   it('updates view position and slider values in picture mode', () => {
@@ -307,19 +363,19 @@ describe('Settings', () => {
 
     render(<Settings />);
 
-    fireEvent.click(screen.getByText('Open View'));
+    fireEvent.click(screen.getByText('Open 位置'));
     expect(state.visible).toBe(false);
 
-    fireEvent.change(screen.getByLabelText('View'), {
+    fireEvent.change(screen.getByLabelText('位置'), {
       target: { value: String(Position.Bottom) },
     });
     expect(state.position).toBe(Position.Bottom);
     expect(state.viewMode).toBe(ViewMode.Picture);
 
-    fireEvent.change(screen.getByLabelText('Size'), { target: { value: '1.3' } });
+    fireEvent.change(screen.getByLabelText('大小'), { target: { value: '1.3' } });
     expect(state.size).toBe(1.3);
 
-    fireEvent.change(screen.getByLabelText('Margin'), { target: { value: '45' } });
+    fireEvent.change(screen.getByLabelText('边距'), { target: { value: '45' } });
     expect(state.margin).toBe(45);
   });
 });

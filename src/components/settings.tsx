@@ -7,12 +7,20 @@ import {
   ButtonItem,
   ToggleField,
 } from '@decky/ui';
-import { useEffect } from 'react';
+import { openFilePicker, toaster } from '@decky/api';
+import { useEffect, useState } from 'react';
 import { FaEdit } from 'react-icons/fa';
 
 import { Position, ViewMode } from '../lib/util';
 import { useGlobalState } from '../hooks/global-state';
 import { UrlModalWithState } from './url-modal';
+import {
+  LOCAL_FILE_EXTENSIONS,
+  LOCAL_DIRECTORY_KEY,
+  localPickerDirectory,
+  prepareLocalFile,
+  toLocalFileUrl,
+} from '../lib/local-files';
 
 export const Settings = () => {
   const [{ viewMode, position, margin, url, size, controlBar }, setGlobalState, stateContext] =
@@ -20,6 +28,41 @@ export const Settings = () => {
 
   const isMinimised = viewMode === ViewMode.Minimised;
   const showPipControls = viewMode === ViewMode.Picture || isMinimised;
+  const [pickingFile, setPickingFile] = useState(false);
+
+  const chooseLocalFile = async () => {
+    setPickingFile(true);
+    setGlobalState((state) => ({ ...state, visible: false }));
+    try {
+      const selection = await openFilePicker(
+        0, // FileSelectionType.FILE (the SDK's ambient const enum cannot be emitted by Rollup)
+        localPickerDirectory(url),
+        true,
+        true,
+        undefined,
+        LOCAL_FILE_EXTENSIONS,
+        false,
+        false,
+      );
+      const path = selection.realpath || selection.path;
+      // Validate before replacing the current page; the browser resolves a fresh URL on reopen.
+      await prepareLocalFile(path);
+      localStorage.setItem(LOCAL_DIRECTORY_KEY, path.slice(0, path.lastIndexOf('/')) || '/');
+      setGlobalState((state) => ({
+        ...state,
+        url: toLocalFileUrl(path),
+        viewMode: ViewMode.Picture,
+        visible: true,
+      }));
+    } catch (error) {
+      if (error !== 'User canceled') {
+        toaster.toast({ title: '无法打开本地文件', body: String(error) });
+      }
+    } finally {
+      setPickingFile(false);
+      setGlobalState((state) => ({ ...state, visible: true }));
+    }
+  };
 
   useEffect(() => {
     setGlobalState((state) => ({
@@ -31,19 +74,24 @@ export const Settings = () => {
   }, []);
 
   const positionOptions = [
-    { label: 'Top Left', data: Position.TopLeft },
-    { label: 'Top', data: Position.Top },
-    { label: 'Top Right', data: Position.TopRight },
-    { label: 'Right', data: Position.Right },
-    { label: 'Bottom Right', data: Position.BottomRight },
-    { label: 'Bottom', data: Position.Bottom },
-    { label: 'Bottom Left', data: Position.BottomLeft },
-    { label: 'Left', data: Position.Left },
+    { label: '左上', data: Position.TopLeft },
+    { label: '上方', data: Position.Top },
+    { label: '右上', data: Position.TopRight },
+    { label: '右侧', data: Position.Right },
+    { label: '右下', data: Position.BottomRight },
+    { label: '下方', data: Position.Bottom },
+    { label: '左下', data: Position.BottomLeft },
+    { label: '左侧', data: Position.Left },
   ];
 
   return (
     <>
       <PanelSection>
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={pickingFile} onClick={chooseLocalFile}>
+            {pickingFile ? '正在选择…' : '本地文件'}
+          </ButtonItem>
+        </PanelSectionRow>
         {viewMode === ViewMode.Closed && (
           <>
             <PanelSectionRow>
@@ -57,7 +105,7 @@ export const Settings = () => {
                   }))
                 }
               >
-                Open
+                打开
               </ButtonItem>
             </PanelSectionRow>
           </>
@@ -66,7 +114,7 @@ export const Settings = () => {
           <>
             <PanelSectionRow>
               <ButtonItem
-                label="Address"
+                label="网址"
                 layout="below"
                 onClick={() => showModal(<UrlModalWithState value={stateContext} />)}
               >
@@ -81,9 +129,9 @@ export const Settings = () => {
             </PanelSectionRow>
             <PanelSectionRow>
               <ToggleField
-                label="Expand"
+                label="展开"
                 disabled={isMinimised}
-                description={isMinimised ? 'Unavailable while minimised' : undefined}
+                description={isMinimised ? '最小化时无法展开，请先还原窗口' : undefined}
                 checked={viewMode === ViewMode.Expand}
                 onChange={(checked) => {
                   setGlobalState((state) => ({
@@ -96,7 +144,7 @@ export const Settings = () => {
             {!isMinimised && (
               <PanelSectionRow>
                 <ToggleField
-                  label="Control Bar"
+                  label="控制栏"
                   checked={controlBar}
                   onChange={(checked) => {
                     setGlobalState((state) => ({
@@ -114,13 +162,13 @@ export const Settings = () => {
             {isMinimised && (
               <PanelSectionRow>
                 <div style={{ fontSize: 12, opacity: 0.6, padding: '0 0 8px' }}>
-                  Portal is minimised. Changes apply when restored.
+                  窗口已最小化，设置将在还原后生效。
                 </div>
               </PanelSectionRow>
             )}
             <PanelSectionRow>
               <DropdownItem
-                label="View"
+                label="位置"
                 selectedOption={position}
                 rgOptions={positionOptions}
                 onMenuOpened={() =>
@@ -140,7 +188,7 @@ export const Settings = () => {
             </PanelSectionRow>
             <PanelSectionRow>
               <SliderField
-                label="Size"
+                label="大小"
                 value={size}
                 onChange={(size) =>
                   setGlobalState((state) => ({
@@ -155,15 +203,15 @@ export const Settings = () => {
                 notchCount={3}
                 notchTicksVisible={true}
                 notchLabels={[
-                  { label: 'S', notchIndex: 0, value: 0.7 },
-                  { label: 'M', notchIndex: 1, value: 1 },
-                  { label: 'L', notchIndex: 2, value: 1.3 },
+                  { label: '小', notchIndex: 0, value: 0.7 },
+                  { label: '中', notchIndex: 1, value: 1 },
+                  { label: '大', notchIndex: 2, value: 1.3 },
                 ]}
               />
             </PanelSectionRow>
             <PanelSectionRow>
               <SliderField
-                label="Margin"
+                label="边距"
                 value={margin}
                 onChange={(margin) =>
                   setGlobalState((state) => ({
@@ -178,9 +226,9 @@ export const Settings = () => {
                 notchCount={3}
                 notchTicksVisible={true}
                 notchLabels={[
-                  { label: 'S', notchIndex: 0, value: 0 },
-                  { label: 'M', notchIndex: 1, value: 30 },
-                  { label: 'L', notchIndex: 2, value: 60 },
+                  { label: '小', notchIndex: 0, value: 0 },
+                  { label: '中', notchIndex: 1, value: 30 },
+                  { label: '大', notchIndex: 2, value: 60 },
                 ]}
               />
             </PanelSectionRow>
@@ -199,7 +247,7 @@ export const Settings = () => {
                   }))
                 }
               >
-                Close
+                关闭
               </ButtonItem>
             </PanelSectionRow>
           </>

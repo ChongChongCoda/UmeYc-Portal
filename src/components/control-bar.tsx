@@ -132,20 +132,36 @@ export const ControlBar = ({ x, y, height, side, viewMode }: ControlBarProps) =>
         >
           {viewMode === ViewMode.Picture && (
             <button
-              aria-label="Cycle Size"
+              aria-label="切换大小"
+              title="切换大小"
               style={buttonStyle}
               onClick={withInteraction(cycleSize)}
             >
               <FaSearchPlus />
             </button>
           )}
-          <button aria-label="Expand" style={buttonStyle} onClick={withInteraction(toggleExpand)}>
+          <button
+            aria-label="展开"
+            title="展开／还原"
+            style={buttonStyle}
+            onClick={withInteraction(toggleExpand)}
+          >
             {viewMode === ViewMode.Picture ? <FaExpand /> : <FaCompress />}
           </button>
-          <button aria-label="Minimise" style={buttonStyle} onClick={withInteraction(minimise)}>
+          <button
+            aria-label="最小化"
+            title="最小化"
+            style={buttonStyle}
+            onClick={withInteraction(minimise)}
+          >
             <FaWindowMinimize />
           </button>
-          <button aria-label="Close" style={buttonStyle} onClick={withInteraction(close)}>
+          <button
+            aria-label="关闭"
+            title="关闭"
+            style={buttonStyle}
+            onClick={withInteraction(close)}
+          >
             <FaTimes />
           </button>
         </div>

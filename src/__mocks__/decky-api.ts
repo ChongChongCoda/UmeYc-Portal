@@ -12,3 +12,8 @@ export const routerHook = {
 export const toaster = {
   toast: vi.fn(),
 };
+
+export const openFilePicker = vi.fn();
+export const FileSelectionType = { FILE: 0, FOLDER: 1 };
+export const prepareLocalFileMock = vi.fn();
+export const callable = vi.fn(() => prepareLocalFileMock);

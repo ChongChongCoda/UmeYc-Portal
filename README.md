@@ -1,5 +1,7 @@
 # Portal
 
+**UmeYc-Portal fork:** Simplified Chinese UI and a game-mode local file picker with an offline image viewer. See [中文说明与构建步骤](README.zh-CN.md). Based on upstream stable v0.1.1; upstream attribution and BSD license are preserved. For this fork, build with `pnpm build && python3 scripts/package.py` and install `out/Portal.zip`.
+
 Portal is a [Decky Loader](https://decky.xyz/) plugin that provides an in-game web portal for streaming, browsing, and media playback on Steam Deck.
 
 ![Portal placeholder screenshot](https://upload.wikimedia.org/wikipedia/commons/6/65/No-Image-Placeholder.svg)
@@ -19,7 +21,7 @@ Portal must be sideloaded manually. You can install a pre-built release or build
 ### Option 1 — Download Directly on Steam Deck (Recommended)
 
 1. Switch to **Desktop Mode** on your Steam Deck.
-2. Open a web browser and go to the [latest release](https://github.com/ajustinjames/decky-portal/releases/latest).
+2. Open a web browser and go to this fork's [releases](https://github.com/xiaochaom/UmeYc-Portal/releases), or build the ZIP using the Chinese instructions above.
 3. Download **Portal.zip** and note where it was saved (usually `~/Downloads`).
 4. Switch back to **Gaming Mode**.
 5. Open the **Quick Access Menu** (... button) and go to the **Decky** tab.
@@ -29,7 +31,7 @@ Portal must be sideloaded manually. You can install a pre-built release or build
 
 ### Option 2 — Download on PC and Copy to Steam Deck
 
-1. Download **Portal.zip** from the [latest release](https://github.com/ajustinjames/decky-portal/releases/latest) on your PC.
+1. Download **Portal.zip** from this fork's [releases](https://github.com/xiaochaom/UmeYc-Portal/releases), or build the ZIP using the Chinese instructions above.
 2. Copy `Portal.zip` to your Steam Deck using any of these methods:
    - **USB drive** — Copy to a USB drive, plug it into your Deck.
    - **KDE Connect** — Pair your PC and Deck on the same network and send the file.
@@ -47,8 +49,8 @@ Portal must be sideloaded manually. You can install a pre-built release or build
 
 1. Clone the repo and install dependencies:
    ```bash
-   git clone https://github.com/ajustinjames/decky-portal.git
-   cd decky-portal
+   git clone https://github.com/xiaochaom/UmeYc-Portal.git
+   cd UmeYc-Portal
    pnpm install
    ```
 2. Build the plugin zip:

@@ -80,7 +80,7 @@ describe('ControlBar', () => {
       <ControlBar x={0} y={100} height={300} side="right" viewMode={ViewMode.Picture} />,
     );
 
-    expect(screen.getByLabelText('Cycle Size')).toBeTruthy();
+    expect(screen.getByLabelText('切换大小')).toBeTruthy();
 
     const expandState = createMockState(ViewMode.Expand);
     vi.mocked(useGlobalState).mockReturnValue([
@@ -91,7 +91,7 @@ describe('ControlBar', () => {
 
     rerender(<ControlBar x={0} y={100} height={300} side="right" viewMode={ViewMode.Expand} />);
 
-    expect(screen.queryByLabelText('Cycle Size')).toBeNull();
+    expect(screen.queryByLabelText('切换大小')).toBeNull();
   });
 
   it('shows FaExpand icon in Picture mode and FaCompress in Expand mode', () => {
@@ -124,7 +124,7 @@ describe('ControlBar', () => {
 
     render(<ControlBar x={0} y={100} height={300} side="right" viewMode={ViewMode.Picture} />);
 
-    fireEvent.click(screen.getByLabelText('Expand'));
+    fireEvent.click(screen.getByLabelText('展开'));
     expect(mock.setState).toHaveBeenCalledTimes(1);
     expect(mock.getState().viewMode).toBe(ViewMode.Expand);
   });
@@ -135,7 +135,7 @@ describe('ControlBar', () => {
 
     render(<ControlBar x={0} y={100} height={300} side="right" viewMode={ViewMode.Expand} />);
 
-    fireEvent.click(screen.getByLabelText('Expand'));
+    fireEvent.click(screen.getByLabelText('展开'));
     expect(mock.getState().viewMode).toBe(ViewMode.Picture);
   });
 
@@ -145,7 +145,7 @@ describe('ControlBar', () => {
 
     render(<ControlBar x={0} y={100} height={300} side="right" viewMode={ViewMode.Picture} />);
 
-    fireEvent.click(screen.getByLabelText('Minimise'));
+    fireEvent.click(screen.getByLabelText('最小化'));
     expect(mock.getState().viewMode).toBe(ViewMode.Minimised);
     expect(mock.getState().previousViewMode).toBe(ViewMode.Picture);
     expect(mock.getState().visible).toBe(true);
@@ -157,7 +157,7 @@ describe('ControlBar', () => {
 
     render(<ControlBar x={0} y={100} height={300} side="right" viewMode={ViewMode.Expand} />);
 
-    fireEvent.click(screen.getByLabelText('Minimise'));
+    fireEvent.click(screen.getByLabelText('最小化'));
     expect(mock.getState().viewMode).toBe(ViewMode.Minimised);
     expect(mock.getState().previousViewMode).toBe(ViewMode.Expand);
   });
@@ -168,7 +168,7 @@ describe('ControlBar', () => {
 
     render(<ControlBar x={0} y={100} height={300} side="right" viewMode={ViewMode.Picture} />);
 
-    fireEvent.click(screen.getByLabelText('Close'));
+    fireEvent.click(screen.getByLabelText('关闭'));
     expect(mock.getState().viewMode).toBe(ViewMode.Closed);
     expect(mock.getState().visible).toBe(false);
   });
@@ -183,7 +183,7 @@ describe('ControlBar', () => {
 
     render(<ControlBar x={0} y={100} height={300} side="right" viewMode={ViewMode.Picture} />);
 
-    fireEvent.click(screen.getByLabelText('Cycle Size'));
+    fireEvent.click(screen.getByLabelText('切换大小'));
     expect(mock.getState().size).toBe(expectedSize);
   });
 
@@ -262,10 +262,10 @@ describe('ControlBar', () => {
 
       render(<ControlBar x={0} y={0} height={300} side="right" viewMode={ViewMode.Picture} />);
 
-      fireEvent.click(screen.getByLabelText('Expand'));
+      fireEvent.click(screen.getByLabelText('展开'));
       expect(onInteraction).toHaveBeenCalledTimes(1);
 
-      fireEvent.click(screen.getByLabelText('Cycle Size'));
+      fireEvent.click(screen.getByLabelText('切换大小'));
       expect(onInteraction).toHaveBeenCalledTimes(2);
     });
 

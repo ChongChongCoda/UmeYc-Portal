@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, waitFor } from '@testing-library/react';
 import { Router } from '@decky/ui';
+import { prepareLocalFileMock } from '../__mocks__/decky-api';
+import { toLocalFileUrl } from '../lib/local-files';
 
 import { PortalView, PortalViewOuter } from './portal-view';
 import { useGlobalState } from '../hooks/global-state';
@@ -82,6 +84,38 @@ describe('PortalView and PortalViewOuter', () => {
 
     expect(container).toBeEmptyDOMElement();
     expect(createBrowserView).not.toHaveBeenCalled();
+  });
+
+  it('resolves a fresh preview address for a persisted local file', async () => {
+    const path = '/run/media/deck/SD/明末第一章.JPG';
+    const state = { ...createState(ViewMode.Picture), url: toLocalFileUrl(path) };
+    vi.mocked(useGlobalState).mockReturnValue([state] as never);
+    prepareLocalFileMock.mockResolvedValueOnce({ url: 'http://127.0.0.1:1234/viewer/new-token' });
+    render(<PortalView />);
+    await waitFor(() =>
+      expect(loadURL).toHaveBeenCalledWith('http://127.0.0.1:1234/viewer/new-token'),
+    );
+    expect(prepareLocalFileMock).toHaveBeenCalledWith(path);
+  });
+
+  it('ignores a local preview response after switching back to a website', async () => {
+    let resolve!: (value: { url: string }) => void;
+    prepareLocalFileMock.mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    vi.mocked(useGlobalState).mockReturnValue([
+      { ...createState(ViewMode.Picture), url: toLocalFileUrl('/tmp/guide.JPG') },
+    ] as never);
+    const { rerender } = render(<PortalView />);
+    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Picture)] as never);
+    rerender(<PortalView />);
+    await act(async () => {
+      resolve({ url: 'http://127.0.0.1:1234/viewer/stale' });
+    });
+    expect(loadURL).toHaveBeenLastCalledWith('https://netflix.com');
+    expect(loadURL).not.toHaveBeenCalledWith('http://127.0.0.1:1234/viewer/stale');
   });
 
   it('renders portal view from outer component when open', () => {

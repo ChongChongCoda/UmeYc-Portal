@@ -54,6 +54,8 @@ export const MinimisedIndicator = ({ position, margin }: MinimisedIndicatorProps
   return (
     <button
       data-testid="minimised-indicator"
+      aria-label="还原悬浮窗"
+      title="还原悬浮窗"
       onClick={restore}
       style={{
         position: 'absolute',

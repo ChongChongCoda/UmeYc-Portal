@@ -5,7 +5,7 @@
   "api_version": 1,
   "publish": {
     "tags": ["portal", "browser", "streaming", "web", "video"],
-    "description": "Open a portable in-game web portal for streaming, browsing, and media while you play.",
+    "description": "简体中文悬浮浏览器，支持在游戏模式选择本地攻略文件、缩放和滚动长图。",
     "image": ""
   }
 }

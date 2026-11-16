@@ -31,6 +31,9 @@ TMP_DIR=$(mktemp -d)
 mkdir -p "${OUT_DIR}" "${TMP_DIR}/${PLUGIN_NAME}"
 cp plugin.json package.json "${TMP_DIR}/${PLUGIN_NAME}/"
 cp -r dist "${TMP_DIR}/${PLUGIN_NAME}/"
+cp main.py "${TMP_DIR}/${PLUGIN_NAME}/"
+cp -r assets "${TMP_DIR}/${PLUGIN_NAME}/"
+[ -f README.zh-CN.md ] && cp README.zh-CN.md "${TMP_DIR}/${PLUGIN_NAME}/"
 [ -f LICENSE ] && cp LICENSE "${TMP_DIR}/${PLUGIN_NAME}/"
 (cd "${TMP_DIR}" && zip -r "${OUT_DIR}/${PLUGIN_NAME}.zip" "${PLUGIN_NAME}")
 rm -rf "${TMP_DIR}"

@@ -1,11 +1,13 @@
 import { Router, WindowRouter, getGamepadNavigationTrees } from '@decky/ui';
 import { useEffect, useState } from 'react';
+import { toaster } from '@decky/api';
 
 import { useGlobalState } from '../hooks/global-state';
 import { intersectRectangles } from '../lib/geometry';
 import { UIComposition, useUIComposition } from '../hooks/use-ui-composition';
 import { BAR_WIDTH, ControlBar } from './control-bar';
 import { MinimisedIndicator } from './minimised-indicator';
+import { localPathFromUrl, prepareLocalFile } from '../lib/local-files';
 import {
   PICTURE_HEIGHT,
   PICTURE_WIDTH,
@@ -87,7 +89,28 @@ const Browser = ({ url, visible, x, y, width, height }: BrowserProps) => {
   }, [handles, visible]);
 
   useEffect(() => {
-    handles?.view.LoadURL(url);
+    if (!handles) return;
+    let cancelled = false;
+    try {
+      const path = localPathFromUrl(url);
+      if (path !== null) {
+        void prepareLocalFile(path).then(
+          (result) => {
+            if (!cancelled) handles.view.LoadURL(result.url);
+          },
+          (error: unknown) => {
+            if (!cancelled) toaster.toast({ title: '无法打开本地文件', body: String(error) });
+          },
+        );
+      } else {
+        handles.view.LoadURL(url);
+      }
+    } catch (error) {
+      toaster.toast({ title: '无法打开本地文件', body: String(error) });
+    }
+    return () => {
+      cancelled = true;
+    };
   }, [url, handles]);
 
   useEffect(() => {
