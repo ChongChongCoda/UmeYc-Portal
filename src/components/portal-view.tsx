@@ -1,6 +1,6 @@
 import { Router, WindowRouter, getGamepadNavigationTrees, quickAccessMenuClasses } from '@decky/ui';
-import { useEffect, useState } from 'react';
-import { toaster } from '@decky/api';
+import { useEffect, useRef, useState } from 'react';
+import { callable, toaster } from '@decky/api';
 
 import { useGlobalState } from '../hooks/global-state';
 import { intersectRectangles } from '../lib/geometry';
@@ -27,6 +27,9 @@ interface BrowserProps {
   width: number;
   height: number;
   preserveHiddenBounds?: boolean;
+  sidebarOpen?: boolean;
+  playbackSpace?: boolean;
+  suppressPlayback?: boolean;
 }
 
 interface BrowserHandle {
@@ -38,6 +41,7 @@ interface BrowserViewHandle {
   GetBrowser(): BrowserHandle;
   LoadURL(url: string): void;
   Destroy(): void;
+  URL?: string;
 }
 
 interface MainWindowInstance {
@@ -60,7 +64,10 @@ interface NavTree {
 interface DeckWindow {
   document: {
     hidden: boolean;
-    querySelector?: (selector: string) => { getBoundingClientRect(): { width: number } } | null;
+    querySelector?: (selector: string) => {
+      getBoundingClientRect(): { width: number };
+      getAttribute?(name: string): string | null;
+    } | null;
     querySelectorAll?: (
       selector: string,
     ) => ArrayLike<{ getBoundingClientRect(): { width: number } }>;
@@ -71,7 +78,20 @@ interface DeckWindow {
   outerHeight?: number;
 }
 
-const Browser = ({ url, visible, x, y, width, height, preserveHiddenBounds }: BrowserProps) => {
+const sendWebSpace = callable<[url: string], void>('send_web_space');
+
+const Browser = ({
+  url,
+  visible,
+  x,
+  y,
+  width,
+  height,
+  preserveHiddenBounds,
+  sidebarOpen,
+  playbackSpace,
+  suppressPlayback,
+}: BrowserProps) => {
   useUIComposition(UIComposition.Notification);
 
   const [handles] = useState<{ browser: BrowserHandle; view: BrowserViewHandle } | null>(() => {
@@ -93,9 +113,45 @@ const Browser = ({ url, visible, x, y, width, height, preserveHiddenBounds }: Br
     };
   });
 
+  const previousPlayback = useRef({ url, sidebarOpen, playbackSpace });
   useEffect(() => {
-    handles?.browser.SetVisible(visible);
-  }, [handles, visible]);
+    if (suppressPlayback) {
+      handles?.browser.SetVisible(visible);
+      return;
+    }
+    const previous = previousPlayback.current;
+    if (!handles) return;
+    const toggle =
+      playbackSpace &&
+      previous.playbackSpace &&
+      previous.url === url &&
+      previous.sidebarOpen !== sidebarOpen;
+    if (!toggle) {
+      previousPlayback.current = { url, sidebarOpen, playbackSpace };
+      handles.browser.SetVisible(visible);
+      return;
+    }
+    let cancelled = false;
+    // Show before resuming, and finish sending pause before hiding. Dropdowns
+    // only change visible; they never change sidebarOpen or toggle playback.
+    if (sidebarOpen) handles.browser.SetVisible(visible);
+    // Steam closes QAM before its combobox commits aria-expanded. Wait for
+    // that short transition so a dropdown can suppress the pending key.
+    const timer = setTimeout(() => {
+      previousPlayback.current = { url, sidebarOpen, playbackSpace };
+      void sendWebSpace(handles.view.URL || url)
+        .catch((error: unknown) =>
+          toaster.toast({ title: '网页空格快捷键发送失败', body: String(error) }),
+        )
+        .finally(() => {
+          if (!cancelled && !sidebarOpen) handles.browser.SetVisible(visible);
+        });
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [handles, visible, url, sidebarOpen, playbackSpace, suppressPlayback]);
 
   useEffect(() => {
     if (!handles) return;
@@ -181,6 +237,15 @@ const getDeckComponentBounds = () => {
   const qamHidden =
     openSideMenu === undefined ? (qam?.document.hidden ?? true) : openSideMenu !== 2;
   const qamBounds = qamHidden ? null : getQuickAccessBounds(qam);
+  // Steam may unmount the entire QAM body while showing a dropdown. Observe
+  // the actual listbox in its main window as well as the original combobox.
+  const main = getOwnerWindow(trees, 'GamepadUI_Full_Root') ?? getOwnerWindow(trees, 'root_1_');
+  const listbox = main?.document.querySelector?.('[role="listbox"]');
+  const dropdownOpen =
+    (listbox?.getBoundingClientRect().width ?? 0) > 0 ||
+    qam?.document
+      .querySelector?.('[role="combobox"][aria-expanded="true"]')
+      ?.getAttribute?.('aria-expanded') === 'true';
 
   const virtualKeyboard = getOwnerWindow(trees, 'virtual keyboard');
   const virtualKeyboardHidden = !(
@@ -202,6 +267,7 @@ const getDeckComponentBounds = () => {
     qam: qamBounds,
     virtualKeyboard: virtualKeyboardBounds,
     qamOpen: !qamHidden,
+    dropdownOpen,
   };
 };
 
@@ -233,12 +299,13 @@ const areDeckComponentBoundsEqual = (
     areRectanglesEqual(first.nav, second.nav) &&
     areRectanglesEqual(first.qam, second.qam) &&
     areRectanglesEqual(first.virtualKeyboard, second.virtualKeyboard) &&
-    first.qamOpen === second.qamOpen
+    first.qamOpen === second.qamOpen &&
+    first.dropdownOpen === second.dropdownOpen
   );
 };
 
 const useDeckComponentBounds = () => {
-  const [state, setState] = useState(getDeckComponentBounds());
+  const [state, setState] = useState(getDeckComponentBounds);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -255,10 +322,10 @@ const useDeckComponentBounds = () => {
 };
 
 export const PortalView = () => {
-  const { nav, qam, virtualKeyboard, qamOpen } = useDeckComponentBounds();
+  const { nav, qam, virtualKeyboard, qamOpen, dropdownOpen } = useDeckComponentBounds();
   const [{ viewMode, position, size, url, visible, ...settings }] = useGlobalState();
   const isSidebar = viewMode === ViewMode.Sidebar;
-  const readerVisible = visible && (!isSidebar || qamOpen);
+  const readerVisible = visible && !dropdownOpen && (!isSidebar || qamOpen);
   const localPath = (() => {
     try {
       return localPathFromUrl(url);
@@ -419,8 +486,13 @@ export const PortalView = () => {
         width={browserWidth}
         height={bounds.height}
         preserveHiddenBounds={isSidebar}
+        sidebarOpen={isSidebar ? qamOpen : undefined}
+        playbackSpace={
+          isSidebar && settings.sidebarVideoSpace === true && /^https?:\/\//i.test(url)
+        }
+        suppressPlayback={dropdownOpen}
       />
-      {readerVisible && localPath && <ReaderInput path={localPath} />}
+      {readerVisible && <ReaderInput path={localPath ?? undefined} />}
       {readerVisible && showControlBar && (
         <ControlBar
           x={barX}

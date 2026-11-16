@@ -1,6 +1,6 @@
 {
   "name": "decky-portal",
-  "version": "1.0.0-zh-cn.4",
+  "version": "1.0.0-zh-cn.10",
   "description": "Portal 悬浮浏览器：简体中文界面，支持在游戏模式选择本地攻略文件和预览长图。",
   "type": "module",
   "scripts": {
@@ -72,6 +72,7 @@
     "@decky/api": "^1.1.3",
     "cotton-box": "^0.14.0",
     "cotton-box-react": "^0.14.0",
+    "qrcode-generator": "1.4.4",
     "react-icons": "^5.5.0",
     "tslib": "^2.8.1"
   },

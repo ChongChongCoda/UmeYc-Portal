@@ -8,8 +8,8 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 root = Path(__file__).resolve().parent.parent
 name = json.loads((root / "plugin.json").read_text())["name"]
-required = ["plugin.json", "package.json", "main.py", "LICENSE", "README.zh-CN.md",
-            "dist/index.js", "assets/image-viewer.html", "assets/image-viewer.js"]
+required = ["plugin.json", "package.json", "main.py", "phone_input.py", "web_scroll.py", "LICENSE", "README.md", "README.zh-CN.md", "README.en.md", "THIRD_PARTY_NOTICES.md",
+            "dist/index.js", "assets/image-viewer.html", "assets/image-viewer.js", "assets/phone-input.html"]
 for relative in required:
     if not (root / relative).is_file():
         raise SystemExit(f"Missing {relative}; run pnpm build first")

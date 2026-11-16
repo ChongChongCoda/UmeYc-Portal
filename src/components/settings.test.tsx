@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { openFilePicker, prepareLocalFileMock, toaster } from '../__mocks__/decky-api';
 import { localPathFromUrl } from '../lib/local-files';
-import type { ReactNode } from 'react';
+import type { ComponentProps, CSSProperties, ReactNode } from 'react';
 
 import { Settings } from './settings';
 import { useGlobalState } from '../hooks/global-state';
@@ -23,6 +23,18 @@ interface DropdownOption {
 }
 
 vi.mock('@decky/ui', () => ({
+  Field: ({ children, label }: { children: ReactNode; label: string }) => (
+    <div>
+      <span>{label}</span>
+      {children}
+    </div>
+  ),
+  Focusable: ({ children, style }: { children: ReactNode; style?: CSSProperties }) => (
+    <div style={style}>{children}</div>
+  ),
+  DialogButton: ({ children, ...props }: ComponentProps<'button'>) => (
+    <button {...props}>{children}</button>
+  ),
   PanelSection: ({ children }: { children: ReactNode }) => <section>{children}</section>,
   PanelSectionRow: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   ButtonItem: ({
@@ -154,6 +166,27 @@ describe('Settings', () => {
     expect(state.visible).toBe(true);
   });
 
+  it('offers optional sidebar space control for websites only', () => {
+    let state = { ...createState(ViewMode.Sidebar), sidebarVideoSpace: false };
+    vi.mocked(useGlobalState).mockReturnValue([
+      state,
+      (f: (s: typeof state) => typeof state) => {
+        state = f(state);
+      },
+      {},
+    ] as never);
+    const { rerender } = render(<Settings />);
+    fireEvent.click(screen.getByLabelText('随侧栏播放/暂停'));
+    expect(state.sidebarVideoSpace).toBe(true);
+    vi.mocked(useGlobalState).mockReturnValue([
+      { ...state, url: 'file:///tmp/guide.JPG' },
+      vi.fn(),
+      {},
+    ] as never);
+    rerender(<Settings />);
+    expect(screen.queryByLabelText('随侧栏播放/暂停')).toBeNull();
+  });
+
   it('opens an SD-card image and remembers its directory', async () => {
     let state = createState(ViewMode.Picture);
     const setGlobalState = vi.fn((updater: (s: typeof state) => typeof state) => {
@@ -231,7 +264,7 @@ describe('Settings', () => {
 
     render(<Settings />);
 
-    fireEvent.click(screen.getByText('网址'));
+    fireEvent.click(screen.getByRole('button', { name: '编辑网址' }));
     expect(showModal).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByLabelText('展开'));
@@ -257,6 +290,41 @@ describe('Settings', () => {
     const result = updater(createState(ViewMode.Minimised));
     expect(result.viewMode).toBe(ViewMode.Minimised);
     expect(result.visible).toBe(true);
+  });
+
+  it('keeps the complete URL on one line beside an icon-only QR button', () => {
+    const state = {
+      ...createState(ViewMode.Sidebar),
+      url: 'https://example.com/' + 'guide/'.repeat(50),
+    };
+    vi.mocked(useGlobalState).mockReturnValue([state, vi.fn(), { marker: true }] as never);
+    render(<Settings />);
+    const edit = screen.getByRole('button', { name: '编辑网址' });
+    expect(edit).toHaveTextContent(state.url);
+    expect(edit.querySelector('span')).toHaveStyle({
+      whiteSpace: 'nowrap',
+      textOverflow: 'ellipsis',
+    });
+    const qr = screen.getByRole('button', { name: '扫码输入网址' });
+    expect(qr.textContent).toBe('');
+    expect(qr.querySelector('svg')).toBeTruthy();
+    expect(edit.contains(qr)).toBe(false);
+    fireEvent.click(qr);
+    expect(showModal).toHaveBeenCalledTimes(1);
+    expect(state.url).toBe('https://example.com/' + 'guide/'.repeat(50));
+  });
+
+  it('shows the Chinese local filename and opens the history picker', () => {
+    const state = {
+      ...createState(ViewMode.Sidebar),
+      url: 'file:///run/media/deck/SD/%E4%B8%AD%E6%96%87%E6%94%BB%E7%95%A5.JPG',
+    };
+    vi.mocked(useGlobalState).mockReturnValue([state, vi.fn(), {}] as never);
+    render(<Settings />);
+    expect(screen.getByRole('button', { name: '编辑网址' })).toHaveTextContent('中文攻略.JPG');
+    expect(screen.queryByText(state.url)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '浏览历史' }));
+    expect(showModal).toHaveBeenCalledOnce();
   });
 
   it('auto-restores from closed to picture when opening settings', () => {
@@ -381,7 +449,8 @@ describe('Settings', () => {
     render(<Settings />);
 
     fireEvent.click(screen.getByText('Open 位置'));
-    expect(state.visible).toBe(false);
+    // Native menu visibility is handled by PortalView, including B/cancel.
+    expect(state.visible).toBe(true);
 
     fireEvent.change(screen.getByLabelText('位置'), {
       target: { value: String(Position.Bottom) },

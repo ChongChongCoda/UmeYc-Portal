@@ -13,6 +13,7 @@ export interface State {
   size: number;
   url: string;
   controlBar: boolean;
+  sidebarVideoSpace?: boolean;
 }
 
 export const GlobalContext = createContext(new StateManager<State>({} as State));

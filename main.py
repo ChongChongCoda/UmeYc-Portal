@@ -1,4 +1,4 @@
-"""Preview explicitly selected local files in Steam's browser, on loopback only."""
+"""Loopback file previews and explicitly opened, short-lived QR URL input."""
 
 import asyncio
 from collections import OrderedDict
@@ -11,9 +11,15 @@ import os
 from pathlib import Path
 import secrets
 import shutil
+import sys
 import threading
 import queue
 from urllib.parse import urlsplit
+
+# Decky loads main.py by filename rather than importing a plugin package.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from phone_input import PhoneInputSession, lan_address
+from web_scroll import WebScroller
 
 
 SUPPORTED_EXTENSIONS = {
@@ -214,6 +220,9 @@ class Plugin:
     def __init__(self):
         self._server = None
         self._thread = None
+        self._phone = None
+        self._phone_lock = asyncio.Lock()
+        self._web_scroller = WebScroller()
 
     def _start(self):
         if self._server is None:
@@ -241,6 +250,11 @@ class Plugin:
         return {"url": self._server.authorize(selected)}
 
     async def _unload(self):
+        await self._web_scroller.close()
+        async with self._phone_lock:
+            if self._phone is not None:
+                await asyncio.to_thread(self._phone.close)
+                self._phone = None
         if self._server is not None:
             self._server.stop_readers()
             await asyncio.to_thread(self._server.shutdown)
@@ -248,6 +262,15 @@ class Plugin:
             await asyncio.to_thread(self._thread.join, 2)
             self._server = None
             self._thread = None
+
+    async def scroll_web_page(self, url: str, x: float, y: float, width: float, height: float):
+        await self._web_scroller.scroll(url, x, y, width, height)
+
+    async def release_web_scroll(self):
+        await self._web_scroller.close()
+
+    async def send_web_space(self, url: str):
+        await self._web_scroller.space(url)
 
     async def set_reader_motion(self, path: str, x: float, y: float):
         if self._server is None:
@@ -260,3 +283,29 @@ class Plugin:
             if selected not in self._server.grants.values():
                 raise ValueError("File has not been selected")
         self._server.motion(selected, x, y)
+
+    async def start_url_input(self):
+        async with self._phone_lock:
+            if self._phone is not None:
+                await asyncio.to_thread(self._phone.close)
+                self._phone = None
+            try:
+                self._phone = PhoneInputSession(lan_address())
+            except OSError as error:
+                raise ValueError("无法打开扫码输入，请检查网络后重试") from error
+            return {"session_id": self._phone.session_id, "url": self._phone.url, "expires_in": 300}
+
+    async def get_url_input_status(self, session_id: str):
+        session = self._phone
+        if session is None or session.session_id != session_id:
+            return {"status": "expired"}
+        status = session.status()
+        if status["status"] != "waiting":
+            await asyncio.to_thread(session.close)
+        return status
+
+    async def cancel_url_input(self, session_id: str):
+        async with self._phone_lock:
+            if self._phone is not None and self._phone.session_id == session_id:
+                await asyncio.to_thread(self._phone.close)
+                self._phone = None

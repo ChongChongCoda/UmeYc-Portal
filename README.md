@@ -1,113 +1,97 @@
-# Portal
+# Portal 悬浮浏览器 · 简体中文版
 
-**UmeYc-Portal fork:** Simplified Chinese UI, a game-mode local file picker, sidebar-linked reading layout, right-stick image scrolling, and session-only reading position memory. See [中文说明与构建步骤](README.zh-CN.md). Based on upstream stable v0.1.1; upstream attribution and BSD license are preserved. For this fork, build with `pnpm build && python3 scripts/package.py` and install `out/Portal.zip`.
+在 Steam Deck 游戏模式中打开网页、阅读本地攻略长图，支持随侧栏显示、右摇杆滚动，以及扫码填写网址。
 
-Portal is a [Decky Loader](https://decky.xyz/) plugin that provides an in-game web portal for streaming, browsing, and media playback on Steam Deck.
+[English / 上游说明](README.en.md) · [实机验证记录](docs/LOCAL_FILES_VERIFICATION.md)
 
-![Portal placeholder screenshot](https://upload.wikimedia.org/wikipedia/commons/6/65/No-Image-Placeholder.svg)
+![Steam Deck 游戏模式中的 Portal 设置实机截图：中文文件名、浏览历史及二维码入口](docs/images/portal-sidebar.png)
 
-## Background
+## 功能
 
-I created this fork of [decky-pip](https://github.com/rossimo/decky-pip) for myself due to enjoying the original but wanting some QOL features implemented.
+- **中文界面**：设置、布局、控制栏和提示均已汉化。
+- **本地攻略**：直接在游戏模式选择 SD 卡或内置存储上的图片，无需手动输入路径。
+- **随侧栏显示**：按「…」展开快捷栏，攻略铺满左侧剩余区域；再按一次同步隐藏。
+- **右摇杆滚动**：网页和本地攻略长图均可上下滚动，支持水平滚动；推动幅度控制速度。网页使用原生滚轮事件，滚动目标为页面中央的内容区。
+- **阅读位置记忆**：按文件记住本次运行期间的位置和缩放；重新打开可接着看，插件重载或重启后清空。
+- **扫码输入网址**：网址右侧的二维码图标打开临时二维码，同一 Wi-Fi 下扫码填写网址即可发送到 Deck。
+- **单行网址**：长地址以省略号显示，点击后仍可编辑完整内容。
+- **最近浏览**：保存最近 5 条网页或本地文件记录，去重并将最近打开的放在最前，点击历史图标即可重开。
+- **中文文件名**：本地文件在网址栏和历史中显示原始中文名称，编辑时显示可读路径。
+- **随侧栏播放/暂停**：网页侧栏模式可选自动发送空格，展开后继续、收起前暂停；默认关闭。
 
-> **Note:** This plugin is not available on the Decky Store. Decky Homebrew has a clear anti-AI-code stance, and I respect their wishes. Please do not bother them about this policy.
+当前版本：`1.0.0-zh-cn.10`。基于官方稳定标签 `v0.1.1`，保留上游提交历史和 BSD-3-Clause 许可证。
 
-## Installation
+## 使用
 
-Portal must be sideloaded manually. You can install a pre-built release or build from source.
+按 Steam Deck 的「…」键，进入 **Decky → Portal 悬浮浏览器**。
 
-**All methods require [Decky Loader](https://decky.xyz/) installed on your Steam Deck.**
+### 本地攻略
 
-### Option 1 — Download Directly on Steam Deck (Recommended)
+1. 选择「本地文件」，进入 SD 卡目录，选择攻略图片。
+2. 「布局」选择「随侧栏显示」，即可边玩边按「…」呼出、收起攻略。
+3. 用右摇杆或触屏滚动；图片顶部的「−」「＋」调整缩放，「适宽」重置为当前窗口宽度。
 
-1. Switch to **Desktop Mode** on your Steam Deck.
-2. Open a web browser and go to this fork's [releases](https://github.com/xiaochaom/UmeYc-Portal/releases), or build the ZIP using the Chinese instructions above.
-3. Download **Portal.zip** and note where it was saved (usually `~/Downloads`).
-4. Switch back to **Gaming Mode**.
-5. Open the **Quick Access Menu** (... button) and go to the **Decky** tab.
-6. Tap the **settings icon** (gear) at the top, then choose **Install Plugin from ZIP File**.
-7. Browse to the downloaded `Portal.zip` and select it.
-8. Decky will install the plugin automatically. Portal should now appear in the Decky menu.
+「适宽」等按钮只调整图片缩放；触屏进入图片页后，窗口仍保持原来的高度。也可选「悬浮小窗」或「全屏」布局。
 
-### Option 2 — Download on PC and Copy to Steam Deck
+图片支持 JPG/JPEG、PNG、GIF、WebP、BMP、SVG、AVIF、ICO，文件名后缀大小写均可。PDF、HTML、TXT、MD 也可选择，由 Steam 浏览器处理；实机验证以 JPG 长图为主。HTML 仅支持单文件内容，不开放相邻资源目录。
 
-1. Download **Portal.zip** from this fork's [releases](https://github.com/xiaochaom/UmeYc-Portal/releases), or build the ZIP using the Chinese instructions above.
-2. Copy `Portal.zip` to your Steam Deck using any of these methods:
-   - **USB drive** — Copy to a USB drive, plug it into your Deck.
-   - **KDE Connect** — Pair your PC and Deck on the same network and send the file.
-   - **SMB / network share** — Access a shared folder from Dolphin on your Deck.
-   - **MicroSD card** — Copy to a MicroSD card and insert it into the Deck.
-3. Switch to **Gaming Mode** on your Steam Deck.
-4. Open the **Quick Access Menu** (... button) and go to the **Decky** tab.
-5. Tap the **settings icon** (gear) at the top, then choose **Install Plugin from ZIP File**.
-6. Browse to where you copied `Portal.zip` and select it.
-7. Decky will install the plugin automatically. Portal should now appear in the Decky menu.
+### 网址与扫码输入
 
-### Option 3 — Build from Source
+- 点击网址本身：直接在 Deck 上编辑完整地址。
+- 点击网址右侧的 **二维码图标**：显示「扫码输入网址」弹窗。
+- 让扫码设备和 Deck 连接同一 Wi-Fi，用相机扫码并在浏览器中打开。
+- 在页面粘贴攻略网页或图片网址，点「发送到 Deck」，Portal 会自动打开收到的地址。
 
-**Additional prerequisites:** Node >= 22 (see `.nvmrc`), pnpm >= 9, Docker
+二维码每次仅可发送一个网址，**5 分钟后过期**；关闭弹窗即取消，点「刷新二维码」可重新生成。支持 `http://`、`https://`，未填写协议时默认补上 `https://`。访客 Wi-Fi 的设备隔离、VPN 路由或防火墙可能影响连接。
 
-1. Clone the repo and install dependencies:
-   ```bash
-   git clone https://github.com/xiaochaom/UmeYc-Portal.git
-   cd UmeYc-Portal
-   pnpm install
-   ```
-2. Build the plugin zip:
-   ```bash
-   pnpm deck:build    # builds inside Docker and packages a zip into out/
-   ```
-3. Deploy to your Deck using one of these methods:
+二维码在 Deck 本机生成；只在打开扫码弹窗时启动临时局域网接收服务，带随机访问令牌。收到网址、取消、过期或卸载时关闭服务。它只接收网址，不向局域网提供本地攻略文件，也不经过外部中转服务。
 
-   **Automated deploy** (requires `deck.json` — see [Configuring deck.json](#configuring-deckjson)):
-   ```bash
-   pnpm deck:deploy         # deploy an already-built zip
-   pnpm deck:builddeploy    # build + deploy in one step
-   ```
+### 网页视频随侧栏播放/暂停
 
-   **Manual deploy** — copy `out/Portal.zip` to your Deck and follow the same steps from Option 1 above.
+打开支持空格播放/暂停的视频网页，将布局设为「随侧栏显示」，先暂停视频，再启用「随侧栏播放/暂停」。从下一次按「…」切换侧栏开始，收起攻略前发送一次空格暂停，展开后发送一次空格继续。选择布局下拉框、打开设置弹窗不会切换播放状态。
 
-#### Configuring deck.json
+此功能发送网页的空格快捷键，不能直接判断站点视频是否正在播放。若手动切换过播放状态，请先关闭开关、暂停视频后重新启用；输入框持有焦点时也应先退出输入。没有空格快捷键的网站不适用。
 
-The deploy script reads connection details from a `deck.json` file in the project root. Create one with your Deck's info:
+## 安装
 
-```json
-{
-  "deckip": "192.168.1.100",
-  "deckport": "22",
-  "deckuser": "deck",
-  "deckdir": "~"
-}
+需要先安装 [Decky Loader](https://decky.xyz/)。
+
+1. 下载或自行构建 `Portal.zip`，复制到 Deck。
+2. 打开 Decky 设置，选择「从 ZIP 文件安装插件」。
+3. 选择 ZIP 并确认安装，随后在 Decky 中打开 Portal。
+
+内部插件名称仍为 `Portal`，升级会保留原有位置、大小和网址设置。其他插件不受影响。以后安装官方版更新会覆盖本分支的改动。
+
+## 从源码构建
+
+环境：Node.js ≥ 22、pnpm ≥ 9、Python ≥ 3.9。
+
+```sh
+pnpm install --frozen-lockfile
+pnpm lint
+pnpm format:check
+pnpm exec tsc --noEmit
+pnpm test:coverage
+python3 -m unittest discover -s tests -v
+pnpm build
+python3 scripts/package.py
 ```
 
-This file is gitignored and will not be committed.
+安装包位于 `out/Portal.zip`，包含前端、Python 后端和图片/扫码页面资源。请安装完整 ZIP，不要只替换 `dist`。
 
-## Development
+## 运行方式与限制
 
-```bash
-pnpm install          # install dependencies
-pnpm build            # build with Rollup
-pnpm watch            # build in watch mode
-pnpm lint             # ESLint check
-pnpm format:check     # Prettier check
-pnpm test             # run tests
-pnpm test:coverage    # run tests with coverage
-```
+Portal 复用 Steam 的 Chromium/CEF 浏览器。静态攻略主要占用图片解码和浏览器内存；没有持续滚动时不运行动画或滚动 RPC，图片隐藏时停止摇杆订阅。尚未对总内存增量、功耗或游戏帧率进行对照测量。
 
-## Documentation
+网页摇杆滚动复用 Decky 已使用的本机 CEF 调试接口，不新增网络监听；网页隐藏时关闭滚动连接。同一网址若同时存在多个无法区分的浏览器页，会提示重新打开，避免误滚其他页面。独立滚动面板或跨域内嵌内容以页面中央接收滚轮的区域为准。
 
-Project documentation lives in [docs/](docs):
+本地文件预览始终只监听 `127.0.0.1` 的随机端口，仅允许访问明确选中的文件。阅读位置仅保存在进程内存，不写入磁盘。拔出 SD 卡后需插回同一张卡，或重新选择文件。
 
-- [docs/README.md](docs/README.md)
-- [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md)
-- [docs/FUTURE_FEATURES.md](docs/FUTURE_FEATURES.md)
-- [docs/VISION.md](docs/VISION.md)
+窗口、侧栏和原始手柄输入依赖 Steam 当前的内部接口；后续 Steam 更新可能需要适配。
 
-## License
+## 来源与许可
 
-Portal is licensed under BSD-3-Clause. See [LICENSE](LICENSE).
-
-## Attribution
-
-- Original plugin foundation: Ross Squires ([rossimo/decky-pip](https://github.com/rossimo/decky-pip))
-- Portal rebrand and ongoing development: Aaron James
+- 本分支：[xiaochaom/UmeYc-Portal](https://github.com/xiaochaom/UmeYc-Portal)
+- Portal 上游：[ajustinjames/decky-portal](https://github.com/ajustinjames/decky-portal)，稳定基线 `v0.1.1`（`023cc39efb1004797291d2269e07fca72def4dba`）。
+- 原始插件基础：Ross Squires 的 [decky-pip](https://github.com/rossimo/decky-pip)。Portal 品牌与上游开发：Aaron James。
+- 项目许可：[BSD-3-Clause](LICENSE)。二维码生成使用 MIT 许可的 `qrcode-generator`。

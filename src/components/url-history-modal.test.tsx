@@ -1,0 +1,95 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import type { ComponentProps, ReactNode } from 'react';
+import { UrlHistoryModal } from './url-history-modal';
+import { useGlobalState } from '../hooks/global-state';
+import { prepareLocalFileMock } from '../__mocks__/decky-api';
+import { rememberUrl } from '../lib/url-history';
+import { toLocalFileUrl } from '../lib/local-files';
+
+vi.mock('../hooks/global-state', () => ({ useGlobalState: vi.fn() }));
+vi.mock('@decky/ui', () => ({
+  ConfirmModal: ({ children, onOK }: { children: ReactNode; onOK: () => void }) => (
+    <div>
+      <button onClick={onOK}>关闭</button>
+      {children}
+    </div>
+  ),
+  DialogButton: (props: ComponentProps<'button'>) => <button {...props} />,
+}));
+
+describe('browsing history picker', () => {
+  let state: { url: string; visible: boolean };
+  beforeEach(() => {
+    state = { url: 'https://current.example/', visible: true };
+    prepareLocalFileMock.mockReset().mockResolvedValue({ url: 'http://127.0.0.1/viewer/test' });
+    vi.mocked(useGlobalState).mockReturnValue([
+      state,
+      (updater: (s: typeof state) => typeof state) => {
+        state = updater(state);
+      },
+    ] as never);
+  });
+
+  it('shows empty history and restores the page on close', () => {
+    const close = vi.fn();
+    const { unmount } = render(<UrlHistoryModal closeModal={close} />);
+    expect(screen.getByText('还没有浏览记录。')).toBeTruthy();
+    expect(state.visible).toBe(false);
+    fireEvent.click(screen.getByText('关闭'));
+    expect(close).toHaveBeenCalledOnce();
+    unmount();
+    expect(state.visible).toBe(true);
+  });
+
+  it('opens a recent website', async () => {
+    rememberUrl(localStorage, 'https://recent.example/');
+    const close = vi.fn();
+    const { unmount } = render(<UrlHistoryModal closeModal={close} />);
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: '打开历史记录 1' })));
+    expect(state.url).toBe('https://recent.example/');
+    expect(close).toHaveBeenCalledOnce();
+    unmount();
+  });
+
+  it('shows a Chinese filename and validates the file before opening', async () => {
+    const path = '/run/media/deck/SD/第一章攻略.JPG';
+    rememberUrl(localStorage, toLocalFileUrl(path));
+    const close = vi.fn();
+    const { unmount } = render(<UrlHistoryModal closeModal={close} />);
+    expect(screen.getByText('第一章攻略.JPG')).toBeTruthy();
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: '打开历史记录 1' })));
+    expect(prepareLocalFileMock).toHaveBeenCalledWith(path);
+    expect(state.url).toBe(toLocalFileUrl(path));
+    expect(close).toHaveBeenCalledOnce();
+    unmount();
+  });
+
+  it('keeps the current page when the SD card file is missing', async () => {
+    rememberUrl(localStorage, '/run/media/deck/SD/攻略.JPG');
+    prepareLocalFileMock.mockRejectedValueOnce(new Error('请插入 SD 卡'));
+    const { unmount } = render(<UrlHistoryModal closeModal={vi.fn()} />);
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: '打开历史记录 1' })));
+    expect(screen.getByRole('alert')).toHaveTextContent('请插入 SD 卡');
+    expect(state.url).toBe('https://current.example/');
+    unmount();
+  });
+
+  it('ignores a file selection that finishes after cancellation', async () => {
+    rememberUrl(localStorage, '/run/media/deck/SD/攻略.JPG');
+    let resolve!: (value: unknown) => void;
+    prepareLocalFileMock.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const { unmount } = render(<UrlHistoryModal closeModal={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '打开历史记录 1' }));
+    unmount();
+    await act(async () => {
+      resolve({ url: 'http://127.0.0.1/viewer/test' });
+    });
+    expect(state.url).toBe('https://current.example/');
+  });
+});

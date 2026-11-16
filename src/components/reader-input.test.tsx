@@ -1,6 +1,10 @@
 import { act, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { setReaderMotionMock } from '../__mocks__/decky-api';
+import {
+  releaseWebScrollMock,
+  scrollWebPageMock,
+  setReaderMotionMock,
+} from '../__mocks__/decky-api';
 import { getActiveControllerIndex } from '../lib/controller';
 
 const { useAxesMock } = vi.hoisted(() => ({ useAxesMock: vi.fn() }));
@@ -58,6 +62,40 @@ describe('right stick reader input', () => {
     });
     expect(setReaderMotionMock).not.toHaveBeenCalled();
     unmount();
+  });
+
+  it('scrolls the current web page and releases it when hidden', async () => {
+    Object.assign(window, {
+      portal: {
+        URL: 'https://guide.example/chapter',
+        GetBrowser: () => ({ GetBounds: () => ({ width: 506, height: 534 }) }),
+      },
+    });
+    useAxesMock.mockReturnValue({ RightJoystick: { x: 0, y: -1 } });
+    const { rerender, unmount } = render(<ReaderInput />);
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(scrollWebPageMock).toHaveBeenLastCalledWith(
+      'https://guide.example/chapter',
+      0,
+      1,
+      506,
+      534,
+    );
+    expect(setReaderMotionMock).not.toHaveBeenCalled();
+    useAxesMock.mockReturnValue({ RightJoystick: { x: 0, y: 0 } });
+    rerender(<ReaderInput />);
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(scrollWebPageMock).toHaveBeenCalledTimes(1);
+    unmount();
+    expect(releaseWebScrollMock).toHaveBeenCalledOnce();
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(scrollWebPageMock).toHaveBeenCalledTimes(1);
   });
 
   it('switches the raw feed when Steam changes its active controller', async () => {

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, waitFor } from '@testing-library/react';
 import { Router } from '@decky/ui';
-import { prepareLocalFileMock } from '../__mocks__/decky-api';
+import { prepareLocalFileMock, sendWebSpaceMock } from '../__mocks__/decky-api';
 import { toLocalFileUrl } from '../lib/local-files';
 import { getOpenSideMenu, isVirtualKeyboardShowing } from '../lib/menu-state';
 
@@ -113,6 +113,149 @@ describe('PortalView and PortalViewOuter', () => {
     },
   });
 
+  it('sends space on sidebar edges only and pauses before hiding', async () => {
+    vi.useFakeTimers();
+    let finishPause!: () => void;
+    try {
+      getGamepadNavigationTrees.mockReturnValue([qamTree()]);
+      vi.mocked(getOpenSideMenu).mockReturnValue(2);
+      vi.mocked(useGlobalState).mockReturnValue([
+        { ...createState(ViewMode.Sidebar), sidebarVideoSpace: true },
+      ] as never);
+      sendWebSpaceMock.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishPause = resolve;
+          }),
+      );
+      const { unmount } = render(<PortalView />);
+      expect(sendWebSpaceMock).not.toHaveBeenCalled();
+      vi.mocked(getOpenSideMenu).mockReturnValue(0);
+      await act(async () => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(sendWebSpaceMock).not.toHaveBeenCalled();
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(sendWebSpaceMock).toHaveBeenCalledWith('https://netflix.com');
+      expect(setVisible).toHaveBeenLastCalledWith(true);
+      await act(async () => {
+        finishPause();
+      });
+      expect(setVisible).toHaveBeenLastCalledWith(false);
+      vi.mocked(getOpenSideMenu).mockReturnValue(2);
+      await act(async () => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(setVisible).toHaveBeenLastCalledWith(true);
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(sendWebSpaceMock).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(sendWebSpaceMock).toHaveBeenCalledTimes(2);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not toggle video when a dropdown temporarily hides the page', async () => {
+    vi.useFakeTimers();
+    try {
+      let opened = false;
+      const tree = qamTree();
+      const mainTree = {
+        id: 'GamepadUI_Full_Root',
+        Root: {
+          Element: {
+            ownerDocument: {
+              defaultView: {
+                document: {
+                  hidden: false,
+                  querySelector: (s: string) =>
+                    s.includes('listbox') && opened
+                      ? { getBoundingClientRect: () => ({ width: 280 }) }
+                      : null,
+                },
+              },
+            },
+          },
+        },
+      };
+      getGamepadNavigationTrees.mockReturnValue([tree]);
+      vi.mocked(getOpenSideMenu).mockReturnValue(2);
+      vi.mocked(useGlobalState).mockReturnValue([
+        { ...createState(ViewMode.Sidebar), sidebarVideoSpace: true },
+      ] as never);
+      const { unmount } = render(<PortalView />);
+      // Steam closes QAM while presenting its dropdown in the main window.
+      vi.mocked(getOpenSideMenu).mockReturnValue(0);
+      getGamepadNavigationTrees.mockReturnValue([mainTree]);
+      await act(async () => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(sendWebSpaceMock).not.toHaveBeenCalled();
+      opened = true;
+      await act(async () => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(setVisible).toHaveBeenLastCalledWith(false);
+      opened = false;
+      vi.mocked(getOpenSideMenu).mockReturnValue(2);
+      getGamepadNavigationTrees.mockReturnValue([tree]);
+      await act(async () => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(setVisible).toHaveBeenLastCalledWith(true);
+      await act(async () => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(sendWebSpaceMock).not.toHaveBeenCalled();
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([ViewMode.Sidebar, ViewMode.Expand])(
+    'keeps native dropdowns clickable in layout %s and restores on cancellation',
+    (mode) => {
+      vi.useFakeTimers();
+      try {
+        let opened = false;
+        const tree = qamTree();
+        Object.assign(tree.m_Root.m_element.ownerDocument.defaultView.document, {
+          querySelector: (selector: string) =>
+            selector.includes('aria-expanded') && opened ? { getAttribute: () => 'true' } : null,
+        });
+        getGamepadNavigationTrees.mockReturnValue([tree]);
+        vi.mocked(getOpenSideMenu).mockReturnValue(2);
+        vi.mocked(useGlobalState).mockReturnValue([createState(mode)] as never);
+        const { unmount } = render(<PortalView />);
+        expect(setVisible).toHaveBeenLastCalledWith(true);
+        opened = true;
+        act(() => {
+          vi.advanceTimersByTime(100);
+        });
+        expect(setVisible).toHaveBeenLastCalledWith(false);
+        expect(destroy).not.toHaveBeenCalled();
+        opened = false;
+        act(() => {
+          vi.advanceTimersByTime(100);
+        });
+        expect(setVisible).toHaveBeenLastCalledWith(true);
+        expect(createBrowserView).toHaveBeenCalledTimes(1);
+        unmount();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it('fills the area left of QAM and hides without resizing or destroying on close', () => {
     vi.useFakeTimers();
     try {
@@ -196,6 +339,62 @@ describe('PortalView and PortalViewOuter', () => {
     vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
     render(<PortalView />);
     expect(setBounds).toHaveBeenLastCalledWith(0, 0, 534, 534);
+  });
+
+  it('keeps sidebar height after a physical touch clears Steam focus', async () => {
+    const actual = await vi.importActual<typeof import('../lib/menu-state')>('../lib/menu-state');
+    vi.mocked(getOpenSideMenu).mockImplementation(actual.getOpenSideMenu);
+    vi.mocked(isVirtualKeyboardShowing).mockImplementation(actual.isVirtualKeyboardShowing);
+    let menu = 2;
+    const main = {
+      MenuStore: { GetOpenSideMenu: () => menu },
+      VirtualKeyboardManager: { IsShowingVirtualKeyboard: { Value: false } },
+    };
+    let focused: typeof main | null = main;
+    const host = window as unknown as { SteamUIStore?: unknown };
+    host.SteamUIStore = {
+      GetFocusedWindowInstance: () => focused,
+      WindowStore: { GamepadUIMainWindowInstance: main },
+    };
+    vi.useFakeTimers();
+    try {
+      getGamepadNavigationTrees.mockReturnValue([
+        qamTree(),
+        {
+          id: 'virtual keyboard',
+          m_Root: {
+            m_element: { ownerDocument: { defaultView: { document: { hidden: false } } } },
+          },
+        },
+      ]);
+      vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
+      const { unmount } = render(<PortalView />);
+      expect(setBounds).toHaveBeenLastCalledWith(0, 0, 534, 534);
+      focused = null;
+      act(() => vi.advanceTimersByTime(100));
+      expect(setBounds).toHaveBeenLastCalledWith(0, 0, 534, 534);
+      expect(setBounds).toHaveBeenCalledTimes(1);
+
+      main.VirtualKeyboardManager.IsShowingVirtualKeyboard.Value = true;
+      act(() => vi.advanceTimersByTime(100));
+      expect(setBounds).toHaveBeenLastCalledWith(0, 0, 534, 294);
+      main.VirtualKeyboardManager.IsShowingVirtualKeyboard.Value = false;
+      act(() => vi.advanceTimersByTime(100));
+      expect(setBounds).toHaveBeenLastCalledWith(0, 0, 534, 534);
+
+      menu = 0;
+      act(() => vi.advanceTimersByTime(100));
+      expect(setVisible).toHaveBeenLastCalledWith(false);
+      menu = 2;
+      act(() => vi.advanceTimersByTime(100));
+      expect(setVisible).toHaveBeenLastCalledWith(true);
+      expect(setBounds).toHaveBeenLastCalledWith(0, 0, 534, 534);
+      expect(createBrowserView).toHaveBeenCalledTimes(1);
+      unmount();
+    } finally {
+      delete host.SteamUIStore;
+      vi.useRealTimers();
+    }
   });
 
   it('resolves a fresh preview address for a persisted local file', async () => {

@@ -40,3 +40,20 @@ export const localPickerDirectory = (address: string): string => {
     ? path.slice(0, path.lastIndexOf('/')) || '/'
     : localStorage.getItem(LOCAL_DIRECTORY_KEY) || '/run/media';
 };
+
+export const addressLabel = (address: string): string => {
+  try {
+    const path = localPathFromUrl(address);
+    return path ? path.slice(path.lastIndexOf('/') + 1) || path : address;
+  } catch {
+    return address;
+  }
+};
+
+export const editableAddress = (address: string): string => {
+  try {
+    return localPathFromUrl(address) ?? address;
+  } catch {
+    return address;
+  }
+};

@@ -3,10 +3,11 @@ import { useEffect, useState } from 'react';
 
 import { modalWithState } from './modal';
 import { useGlobalState } from '../hooks/global-state';
+import { editableAddress } from '../lib/local-files';
 
 export const UrlModal = (props: ModalRootProps) => {
   const [{ url }, setGlobalState] = useGlobalState();
-  const [field, setField] = useState(url);
+  const [field, setField] = useState(() => editableAddress(url));
 
   useEffect(() => {
     setGlobalState((state) => ({

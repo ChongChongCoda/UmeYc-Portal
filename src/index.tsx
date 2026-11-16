@@ -8,6 +8,7 @@ import { Settings } from './components/settings';
 import { Position, ViewMode } from './lib/util';
 import { State, GlobalContext } from './hooks/global-state';
 import { getPersistedPortalState, PORTAL_STORAGE_KEY } from './lib/storage';
+import { rememberUrl } from './lib/url-history';
 
 export default definePlugin(() => {
   const defaultState: State = {
@@ -19,6 +20,7 @@ export default definePlugin(() => {
     size: 1,
     url: 'https://netflix.com',
     controlBar: true,
+    sidebarVideoSpace: false,
   };
 
   const state = new StateManager<State>({
@@ -26,9 +28,17 @@ export default definePlugin(() => {
     ...getPersistedPortalState(localStorage),
   });
 
-  state.watch(({ position, margin, size, url }) =>
-    localStorage.setItem(PORTAL_STORAGE_KEY, JSON.stringify({ position, margin, size, url })),
-  );
+  let lastUrl: string | undefined;
+  state.watch(({ position, margin, size, url, sidebarVideoSpace }) => {
+    localStorage.setItem(
+      PORTAL_STORAGE_KEY,
+      JSON.stringify({ position, margin, size, url, sidebarVideoSpace }),
+    );
+    if (url !== lastUrl) {
+      lastUrl = url;
+      rememberUrl(localStorage, url);
+    }
+  });
 
   routerHook.addGlobalComponent('Portal', () => {
     return (
