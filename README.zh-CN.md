@@ -1,6 +1,6 @@
 # Portal 简体中文版
 
-基于 ajustinjames/decky-portal 官方稳定标签 v0.1.1（023cc39efb1004797291d2269e07fca72def4dba），安装版本标记为 1.0.0-zh-cn.3。保留 BSD-3-Clause 许可证及上游提交历史。
+基于 ajustinjames/decky-portal 官方稳定标签 v0.1.1（023cc39efb1004797291d2269e07fca72def4dba），安装版本标记为 1.0.0-zh-cn.4。保留 BSD-3-Clause 许可证及上游提交历史。
 
 汉化了设置、位置选项、大小与边距、网址对话框、控制栏及最小化提示。插件内部名称仍为 Portal，网页本身的内容由网站提供。
 

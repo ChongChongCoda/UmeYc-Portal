@@ -1,6 +1,7 @@
 import { findModuleExport } from '@decky/ui';
 import { callable } from '@decky/api';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { getActiveControllerIndex } from '../lib/controller';
 
 interface AxesState {
   RightJoystick?: { x: number; y: number };
@@ -19,8 +20,14 @@ export const stickVelocity = (value: number): number => {
   return Math.sign(value) * Math.min(1, (Math.abs(value) - 0.18) / 0.82);
 };
 
-const NativeReaderInput = ({ path }: { path: string }) => {
-  const axes = useAxesFeed!(0);
+const NativeReaderInput = ({
+  path,
+  controllerIndex,
+}: {
+  path: string;
+  controllerIndex: number;
+}) => {
+  const axes = useAxesFeed!(controllerIndex);
   const latest = useRef(axes);
   useEffect(() => {
     latest.current = axes;
@@ -46,10 +53,19 @@ const NativeReaderInput = ({ path }: { path: string }) => {
       clearInterval(timer);
       void setMotion(path, 0, 0).catch(() => undefined);
     };
-  }, [path]);
+  }, [path, controllerIndex]);
 
   return null;
 };
 
-export const ReaderInput = ({ path }: { path: string }) =>
-  useAxesFeed ? <NativeReaderInput path={path} /> : null;
+export const ReaderInput = ({ path }: { path: string }) => {
+  const [controllerIndex, setControllerIndex] = useState(getActiveControllerIndex);
+  useEffect(() => {
+    const timer = setInterval(() => setControllerIndex(getActiveControllerIndex()), 250);
+    return () => clearInterval(timer);
+  }, []);
+
+  return useAxesFeed && controllerIndex !== undefined ? (
+    <NativeReaderInput path={path} controllerIndex={controllerIndex} />
+  ) : null;
+};

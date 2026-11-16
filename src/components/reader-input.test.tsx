@@ -1,9 +1,11 @@
 import { act, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setReaderMotionMock } from '../__mocks__/decky-api';
+import { getActiveControllerIndex } from '../lib/controller';
 
 const { useAxesMock } = vi.hoisted(() => ({ useAxesMock: vi.fn() }));
 vi.mock('@decky/ui', () => ({ findModuleExport: () => useAxesMock }));
+vi.mock('../lib/controller', () => ({ getActiveControllerIndex: vi.fn() }));
 
 import { ReaderInput, stickVelocity } from './reader-input';
 
@@ -11,6 +13,7 @@ describe('right stick reader input', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    vi.mocked(getActiveControllerIndex).mockReturnValue(15);
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -27,6 +30,7 @@ describe('right stick reader input', () => {
   it('sends downward motion, stops on release and unregisters polling when hidden', async () => {
     useAxesMock.mockReturnValue({ RightJoystick: { x: 0, y: -1 } });
     const { rerender, unmount } = render(<ReaderInput path="/tmp/guide.JPG" />);
+    expect(useAxesMock).toHaveBeenCalledWith(15);
     await act(async () => {
       vi.advanceTimersByTime(100);
     });
@@ -53,6 +57,25 @@ describe('right stick reader input', () => {
       vi.advanceTimersByTime(1000);
     });
     expect(setReaderMotionMock).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it('switches the raw feed when Steam changes its active controller', async () => {
+    useAxesMock.mockReturnValue({ RightJoystick: { x: 0, y: 0 } });
+    const { unmount } = render(<ReaderInput path="/tmp/guide.JPG" />);
+    expect(useAxesMock).toHaveBeenLastCalledWith(15);
+    vi.mocked(getActiveControllerIndex).mockReturnValue(3);
+    await act(async () => {
+      vi.advanceTimersByTime(250);
+    });
+    expect(useAxesMock).toHaveBeenLastCalledWith(3);
+    unmount();
+  });
+
+  it('does not subscribe to a made-up device when no controller exists', () => {
+    vi.mocked(getActiveControllerIndex).mockReturnValue(undefined);
+    const { unmount } = render(<ReaderInput path="/tmp/guide.JPG" />);
+    expect(useAxesMock).not.toHaveBeenCalled();
     unmount();
   });
 });
