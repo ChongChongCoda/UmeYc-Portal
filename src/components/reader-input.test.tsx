@@ -4,11 +4,18 @@ import {
   releaseWebScrollMock,
   scrollWebPageMock,
   setReaderMotionMock,
+  toggleWebFullscreenMock,
 } from '../__mocks__/decky-api';
 import { getActiveControllerIndex } from '../lib/controller';
 
-const { useAxesMock } = vi.hoisted(() => ({ useAxesMock: vi.fn() }));
-vi.mock('@decky/ui', () => ({ findModuleExport: () => useAxesMock }));
+const { useAxesMock, useButtonsMock } = vi.hoisted(() => ({
+  useAxesMock: vi.fn(),
+  useButtonsMock: vi.fn(),
+}));
+vi.mock('@decky/ui', () => ({
+  findModuleExport: (predicate: (value: unknown) => boolean) =>
+    predicate(function useControllerButtonFeed() {}) ? useButtonsMock : useAxesMock,
+}));
 vi.mock('../lib/controller', () => ({ getActiveControllerIndex: vi.fn() }));
 
 import { ReaderInput, stickVelocity } from './reader-input';
@@ -18,6 +25,7 @@ describe('right stick reader input', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     vi.mocked(getActiveControllerIndex).mockReturnValue(15);
+    useButtonsMock.mockReturnValue({ bRightStickClick: false });
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -114,6 +122,41 @@ describe('right stick reader input', () => {
     vi.mocked(getActiveControllerIndex).mockReturnValue(undefined);
     const { unmount } = render(<ReaderInput path="/tmp/guide.JPG" />);
     expect(useAxesMock).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it('sends F once per R3 press, ignores a held stick on opening, and unsubscribes when hidden', async () => {
+    Object.assign(window, {
+      portal: {
+        URL: 'https://video.example/',
+        GetBrowser: () => ({ GetBounds: () => ({ width: 506, height: 500 }) }),
+      },
+    });
+    useAxesMock.mockReturnValue({ RightJoystick: { x: 0, y: 0 } });
+    useButtonsMock.mockReturnValue({ bRightStickClick: true });
+    const { rerender, unmount } = render(<ReaderInput fullscreen />);
+    expect(useButtonsMock).toHaveBeenCalledWith(15);
+    expect(toggleWebFullscreenMock).not.toHaveBeenCalled();
+    useButtonsMock.mockReturnValue({ bRightStickClick: false });
+    rerender(<ReaderInput fullscreen />);
+    useButtonsMock.mockReturnValue({ bRightStickClick: true });
+    await act(async () => rerender(<ReaderInput fullscreen />));
+    expect(toggleWebFullscreenMock).toHaveBeenCalledExactlyOnceWith('https://video.example/');
+    rerender(<ReaderInput fullscreen />);
+    expect(toggleWebFullscreenMock).toHaveBeenCalledTimes(1);
+    useButtonsMock.mockReturnValue({ bRightStickClick: false });
+    rerender(<ReaderInput fullscreen />);
+    useButtonsMock.mockReturnValue({ bRightStickClick: true });
+    await act(async () => rerender(<ReaderInput fullscreen />));
+    expect(toggleWebFullscreenMock).toHaveBeenCalledTimes(2);
+    unmount();
+  });
+
+  it('does not subscribe to R3 when disabled or viewing local files', () => {
+    const { rerender, unmount } = render(<ReaderInput />);
+    expect(useButtonsMock).not.toHaveBeenCalled();
+    rerender(<ReaderInput path="/tmp/guide.JPG" fullscreen />);
+    expect(useButtonsMock).not.toHaveBeenCalled();
     unmount();
   });
 });

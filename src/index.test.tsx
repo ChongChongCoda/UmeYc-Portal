@@ -59,6 +59,7 @@ describe('plugin entrypoint', () => {
     const provider = globalComponentFactory!();
     const stateManager = provider.props.value as StateManager<Record<string, unknown>>;
     expect(stateManager.get().viewMode).toBe(5);
+    expect(stateManager.get().rightStickFullscreen).toBe(false);
 
     stateManager.set({
       viewMode: 2,
@@ -68,6 +69,7 @@ describe('plugin entrypoint', () => {
       margin: 45,
       size: 1.3,
       url: 'https://example.com',
+      rightStickFullscreen: true,
     });
 
     expect(setItemSpy).toHaveBeenCalledWith(
@@ -77,6 +79,7 @@ describe('plugin entrypoint', () => {
         margin: 45,
         size: 1.3,
         url: 'https://example.com',
+        rightStickFullscreen: true,
       }),
     );
   });

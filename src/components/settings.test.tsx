@@ -1,13 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { openFilePicker, prepareLocalFileMock, toaster } from '../__mocks__/decky-api';
-import { localPathFromUrl } from '../lib/local-files';
-import type { ComponentProps, CSSProperties, ReactNode } from 'react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import type { ComponentProps, ReactNode } from 'react';
 
 import { Settings } from './settings';
 import { useGlobalState } from '../hooks/global-state';
 import { Position, ViewMode } from '../lib/util';
-import { showModal } from '@decky/ui';
+import { rememberUrl, rememberPageTitle } from '../lib/url-history';
 
 vi.mock('../hooks/global-state', () => ({
   useGlobalState: vi.fn(),
@@ -23,9 +21,6 @@ vi.mock('@decky/ui', () => ({
       <span>{label}</span>
       {children}
     </div>
-  ),
-  Focusable: ({ children, style }: { children: ReactNode; style?: CSSProperties }) => (
-    <div style={style}>{children}</div>
   ),
   DialogButton: ({ children, ...props }: ComponentProps<'button'>) => (
     <button {...props}>{children}</button>
@@ -108,7 +103,11 @@ describe('Settings', () => {
   );
 
   it('offers optional sidebar space control for websites only', () => {
-    let state = { ...createState(ViewMode.Sidebar), sidebarVideoSpace: false };
+    let state = {
+      ...createState(ViewMode.Sidebar),
+      sidebarVideoSpace: false,
+      rightStickFullscreen: false,
+    };
     vi.mocked(useGlobalState).mockReturnValue([
       state,
       (f: (s: typeof state) => typeof state) => {
@@ -119,6 +118,8 @@ describe('Settings', () => {
     const { rerender } = render(<Settings />);
     fireEvent.click(screen.getByLabelText('随侧栏播放/暂停'));
     expect(state.sidebarVideoSpace).toBe(true);
+    fireEvent.click(screen.getByLabelText('按下右摇杆切换视频全屏'));
+    expect(state.rightStickFullscreen).toBe(true);
     vi.mocked(useGlobalState).mockReturnValue([
       { ...state, url: 'file:///tmp/guide.JPG' },
       vi.fn(),
@@ -126,59 +127,21 @@ describe('Settings', () => {
     ] as never);
     rerender(<Settings />);
     expect(screen.queryByLabelText('随侧栏播放/暂停')).toBeNull();
+    expect(screen.queryByLabelText('按下右摇杆切换视频全屏')).toBeNull();
   });
 
-  it('opens an SD-card image and remembers its directory', async () => {
-    let state = createState(ViewMode.Picture);
-    const setGlobalState = vi.fn((updater: (s: typeof state) => typeof state) => {
-      state = updater(state);
-    });
-    vi.mocked(useGlobalState).mockReturnValue([state, setGlobalState, {}] as never);
-    const path = '/run/media/deck/SD/明末攻略/第一章 #1.JPG';
-    openFilePicker.mockResolvedValueOnce({ realpath: path, path });
-    prepareLocalFileMock.mockResolvedValueOnce({ url: 'http://127.0.0.1:1234/viewer/test' });
-    render(<Settings />);
-    fireEvent.click(screen.getByText('本地文件'));
-    await waitFor(() => expect(localPathFromUrl(state.url)).toBe(path));
-    expect(openFilePicker.mock.calls[0][1]).toBe('/run/media');
-    expect(state.visible).toBe(true);
-    expect(state.viewMode).toBe(ViewMode.Sidebar);
-    expect(localStorage.getItem('portal.localDirectory')).toBe('/run/media/deck/SD/明末攻略');
-  });
-
-  it('restores the page after cancellation without showing an error', async () => {
-    let state = createState(ViewMode.Picture);
+  it('opens the local file manager', () => {
     vi.mocked(useGlobalState).mockReturnValue([
-      state,
-      (updater: (s: typeof state) => typeof state) => {
-        state = updater(state);
-      },
+      createState(ViewMode.Sidebar),
+      vi.fn(),
       {},
     ] as never);
-    openFilePicker.mockRejectedValueOnce('User canceled');
     render(<Settings />);
     fireEvent.click(screen.getByText('本地文件'));
-    await waitFor(() => expect(state.visible).toBe(true));
-    expect(state.url).toBe('https://netflix.com');
-    expect(toaster.toast).not.toHaveBeenCalled();
-  });
-
-  it('keeps the previous page when the selected file cannot be read', async () => {
-    let state = createState(ViewMode.Picture);
-    vi.mocked(useGlobalState).mockReturnValue([
-      state,
-      (updater: (s: typeof state) => typeof state) => {
-        state = updater(state);
-      },
-      {},
-    ] as never);
-    openFilePicker.mockResolvedValueOnce({ path: '/missing.JPG' });
-    prepareLocalFileMock.mockRejectedValueOnce(new Error('文件不存在'));
-    render(<Settings />);
-    fireEvent.click(screen.getByText('本地文件'));
-    await waitFor(() => expect(toaster.toast).toHaveBeenCalled());
-    expect(state.url).toBe('https://netflix.com');
-    expect(state.visible).toBe(true);
+    const setter = vi.mocked(vi.mocked(useGlobalState).mock.results.slice(-1)[0].value[1]);
+    expect(setter).toHaveBeenLastCalledWith(expect.any(Function));
+    const update = setter.mock.calls.slice(-1)[0][0];
+    expect(update(createState(ViewMode.Sidebar)).activePanel).toBe('files');
   });
 
   it('can reopen a closed reader in sidebar mode', () => {
@@ -208,32 +171,42 @@ describe('Settings', () => {
 
     render(<Settings />);
 
-    fireEvent.click(screen.getByRole('button', { name: '编辑网址' }));
-    expect(showModal).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: '编辑网页' }));
+    expect((state as typeof state & { activePanel: string }).activePanel).toBe('url');
 
     fireEvent.click(screen.getByText('关闭'));
     expect(state.viewMode).toBe(ViewMode.Closed);
   });
 
-  it('keeps the complete URL on one line beside an icon-only QR button', () => {
+  it('keeps the URL below its label and puts plain history and QR buttons on separate rows', () => {
     const state = {
       ...createState(ViewMode.Sidebar),
       url: 'https://example.com/' + 'guide/'.repeat(50),
     };
     vi.mocked(useGlobalState).mockReturnValue([state, vi.fn(), { marker: true }] as never);
+    rememberUrl(localStorage, state.url);
+    rememberPageTitle(localStorage, state.url, '很长的网页标题'.repeat(20));
     render(<Settings />);
-    const edit = screen.getByRole('button', { name: '编辑网址' });
-    expect(edit).toHaveTextContent(state.url);
+    const edit = screen.getByRole('button', { name: '编辑网页' });
+    expect(screen.getByText('网页')).toBeTruthy();
+    expect(edit).toHaveTextContent('很长的网页标题');
+    expect(edit).not.toHaveTextContent(state.url);
+    expect(screen.queryByText('网址')).toBeNull();
     expect(edit.querySelector('span')).toHaveStyle({
       whiteSpace: 'nowrap',
       textOverflow: 'ellipsis',
     });
-    const qr = screen.getByRole('button', { name: '扫码输入网址' });
-    expect(qr.textContent).toBe('');
-    expect(qr.querySelector('svg')).toBeTruthy();
+    const qr = screen.getByRole('button', { name: '扫码传送' });
+    expect(qr.textContent).toBe('扫码传送');
+    expect(qr.querySelector('svg')).toBeNull();
+    const history = screen.getByRole('button', { name: '历史记录' });
+    expect(history.querySelector('svg')).toBeNull();
+    expect(qr.parentElement).not.toBe(history.parentElement);
+    expect(edit).toHaveStyle({ width: '100%' });
     expect(edit.contains(qr)).toBe(false);
     fireEvent.click(qr);
-    expect(showModal).toHaveBeenCalledTimes(1);
+    const setter = vi.mocked(vi.mocked(useGlobalState).mock.results.slice(-1)[0].value[1]);
+    expect(setter.mock.calls.slice(-1)[0][0](state).activePanel).toBe('phone');
     expect(state.url).toBe('https://example.com/' + 'guide/'.repeat(50));
   });
 
@@ -244,9 +217,10 @@ describe('Settings', () => {
     };
     vi.mocked(useGlobalState).mockReturnValue([state, vi.fn(), {}] as never);
     render(<Settings />);
-    expect(screen.getByRole('button', { name: '编辑网址' })).toHaveTextContent('中文攻略.JPG');
+    expect(screen.getByRole('button', { name: '编辑网页' })).toHaveTextContent('中文攻略.JPG');
     expect(screen.queryByText(state.url)).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '浏览历史' }));
-    expect(showModal).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: '历史记录' }));
+    const setter = vi.mocked(vi.mocked(useGlobalState).mock.results.slice(-1)[0].value[1]);
+    expect(setter.mock.calls.slice(-1)[0][0](state).activePanel).toBe('history');
   });
 });

@@ -51,6 +51,24 @@ class WebScrollTests(unittest.IsolatedAsyncioTestCase):
             await self.scroller.space("https://video.example/")
         self.assertEqual(self.socket.send_json.call_args_list[-1].args[0]["params"]["type"], "keyUp")
 
+    async def test_fullscreen_sends_f_down_and_up_to_matching_web_page(self):
+        self.socket.receive_json.side_effect = [{"id": 1}, {"id": 2}]
+        await self.scroller.fullscreen("https://video.example/")
+        calls = [call.args[0] for call in self.socket.send_json.call_args_list]
+        self.connection.assert_awaited_once_with("https://video.example/")
+        self.assertEqual([c["params"]["type"] for c in calls], ["keyDown", "keyUp"])
+        self.assertTrue(all(c["params"]["key"] == "f" and c["params"]["code"] == "KeyF"
+                            and c["params"]["windowsVirtualKeyCode"] == 70 for c in calls))
+
+    async def test_fullscreen_releases_key_on_error_and_rejects_non_web_targets(self):
+        self.socket.receive_json.side_effect = [{"id": 1, "error": {}}, {"id": 2}]
+        with self.assertRaises(RuntimeError):
+            await self.scroller.fullscreen("https://video.example/")
+        self.assertEqual(self.socket.send_json.call_args_list[-1].args[0]["params"]["type"], "keyUp")
+        for url in ["file:///tmp/guide.JPG", "https://steamloopback.host/"]:
+            with self.assertRaises(ValueError):
+                await self.scroller.fullscreen(url)
+
     async def test_invalid_inputs_cannot_target_steam_or_non_web_pages(self):
         for url, x, width in [("https://steamloopback.host/", 1, 506), ("file:///etc/passwd", 1, 506),
                               ("https://guide.example/", float("nan"), 506),

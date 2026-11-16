@@ -1,6 +1,7 @@
 """Short-lived, token-protected LAN form for entering a Portal URL by QR code."""
 
 import html
+import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import ipaddress
 from pathlib import Path
@@ -10,6 +11,8 @@ import socket
 import threading
 import time
 from urllib.parse import parse_qs, urlsplit
+
+from image_upload import MAX_IMAGE_BYTES, save_image
 
 
 def lan_address():
@@ -45,10 +48,12 @@ def normalize_url(value):
 
 
 class PhoneInputSession:
-    def __init__(self, address, timeout=300):
+    def __init__(self, address, timeout=300, upload_directory=None):
         self.session_id = secrets.token_urlsafe(32)
         self.expires_at = time.monotonic() + timeout
         self._url = None
+        self.upload_directory = upload_directory
+        self._receiving = False
         self._closed = False
         self._lock = threading.Lock()
         self._close_lock = threading.Lock()
@@ -71,16 +76,42 @@ class PhoneInputSession:
                 return {"status": "received", "url": self._url}
             if self._closed or time.monotonic() >= self.expires_at:
                 return {"status": "expired"}
-            return {"status": "waiting"}
+            return {"status": "uploading" if self._receiving else "waiting"}
 
     def submit(self, value):
         value = normalize_url(value)
         with self._lock:
             if self._closed or time.monotonic() >= self.expires_at:
                 raise TimeoutError()
-            if self._url is not None:
+            if self._url is not None or self._receiving:
                 raise FileExistsError()
             self._url = value
+
+    def upload(self, filename, stream, length):
+        with self._lock:
+            self._check_active()
+            if self._url is not None or self._receiving:
+                raise FileExistsError()
+            self._receiving = True
+        target = None
+        try:
+            if self.upload_directory is None:
+                raise ValueError("请在 Deck 上选择图片保存位置")
+            target = save_image(self.upload_directory, filename, stream, length, self._check_active)
+            with self._lock:
+                self._check_active()
+                self._url = target.as_uri()
+        except BaseException:
+            if target is not None:
+                target.unlink(missing_ok=True)
+            raise
+        finally:
+            with self._lock:
+                self._receiving = False
+
+    def _check_active(self):
+        if self._closed or time.monotonic() >= self.expires_at:
+            raise TimeoutError()
 
     def close(self):
         with self._close_lock:
@@ -98,12 +129,13 @@ class PhoneInputHandler(BaseHTTPRequestHandler):
         # Neither the one-time token nor the submitted address belongs in logs.
         pass
 
-    def _authorized(self):
+    def _authorized(self, script=False):
         session = self.server.session
         if self.headers.get("Host") != session.origin.removeprefix("http://"):
             self.send_error(403)
             return False
-        if urlsplit(self.path).path != "/" + session.session_id:
+        expected = "/" + session.session_id + ("/upload.js" if script else "")
+        if urlsplit(self.path).path != expected:
             self.send_error(404)
             return False
         return True
@@ -112,7 +144,9 @@ class PhoneInputHandler(BaseHTTPRequestHandler):
         template = Path(__file__).with_name("assets").joinpath("phone-input.html")
         content = template.read_text(encoding="utf-8").replace(
             "{{MESSAGE}}", html.escape(message)
-        ).replace("{{FORM_DISPLAY}}", "none" if done else "block").encode("utf-8")
+        ).replace("{{FORM_DISPLAY}}", "none" if done else "block").replace(
+            "{{UPLOAD_SCRIPT}}", f"/{self.server.session.session_id}/upload.js"
+        ).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(content)))
@@ -122,18 +156,32 @@ class PhoneInputHandler(BaseHTTPRequestHandler):
         # to other sites.
         self.send_header("Referrer-Policy", "same-origin")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
         self.end_headers()
         self.wfile.write(content)
 
     def do_GET(self):
-        if not self._authorized():
+        script = urlsplit(self.path).path.endswith("/upload.js")
+        if not self._authorized(script=script):
             return
         status = self.server.session.status()["status"]
+        if script:
+            if status == "expired":
+                self.send_error(410)
+                return
+            data = Path(__file__).with_name("assets").joinpath("phone-input.js").read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/javascript; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if status == "expired":
             self._page("二维码已过期，请在 Deck 上重新打开扫码输入。", done=True, status=410)
         elif status == "received":
-            self._page("网址已发送，请回到 Deck 查看。", done=True)
+            self._page("内容已发送，请回到 Deck 查看。", done=True)
         else:
             self._page()
 
@@ -143,6 +191,14 @@ class PhoneInputHandler(BaseHTTPRequestHandler):
         session = self.server.session
         if self.headers.get("Origin") not in {None, session.origin}:
             self.send_error(403)
+            return
+        try:
+            query = parse_qs(urlsplit(self.path).query, max_num_fields=4)
+        except ValueError:
+            self.send_error(400)
+            return
+        if query.get("upload") == ["1"]:
+            self._upload(query)
             return
         if self.headers.get("Content-Type", "").split(";", 1)[0] != "application/x-www-form-urlencoded":
             self.send_error(415)
@@ -164,3 +220,34 @@ class PhoneInputHandler(BaseHTTPRequestHandler):
             self._page("此二维码已使用，请在 Deck 上重新打开扫码输入。", done=True, status=409)
         else:
             self._page("网址已发送，请回到 Deck 查看。", done=True)
+
+    def _upload(self, query):
+        try:
+            names = query.get("filename", [])
+            if len(names) != 1:
+                raise ValueError("请选择一张图片")
+            length = int(self.headers.get("Content-Length", "0"))
+            if not 0 < length <= MAX_IMAGE_BYTES:
+                raise ValueError("请选择不超过 64 MB 的图片")
+            self.connection.settimeout(20)
+            self.server.session.upload(names[0], self.rfile, length)
+        except TimeoutError:
+            self._json("上传超时或二维码已过期，请重新扫码上传。", 410)
+        except FileExistsError:
+            self._json("此二维码正在接收或已使用，请在 Deck 上重新打开扫码传送。", 409)
+        except (ValueError, UnicodeError) as error:
+            self._json(str(error), 400)
+        except OSError:
+            self._json("图片未能保存，请检查保存位置和剩余空间后重试。", 400)
+        else:
+            self._json("图片已上传，请回到 Deck 查看。", 200)
+
+    def _json(self, message, status):
+        data = json.dumps({"message": message}, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(data)

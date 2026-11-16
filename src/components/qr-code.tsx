@@ -19,11 +19,11 @@ export const QrCode = ({ value }: { value: string }) => {
   return (
     <svg
       role="img"
-      aria-label="扫码输入网址二维码"
+      aria-label="扫码传送二维码"
       viewBox={`0 0 ${size} ${size}`}
-      width={212}
-      height={212}
-      style={{ display: 'block', margin: '12px auto' }}
+      width={160}
+      height={160}
+      style={{ display: 'block', margin: '8px auto' }}
       shapeRendering="crispEdges"
     >
       <rect width={size} height={size} fill="white" />

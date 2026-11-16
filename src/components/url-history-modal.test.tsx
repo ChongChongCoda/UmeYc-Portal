@@ -4,18 +4,27 @@ import type { ComponentProps, ReactNode } from 'react';
 import { UrlHistoryModal } from './url-history-modal';
 import { useGlobalState } from '../hooks/global-state';
 import { prepareLocalFileMock } from '../__mocks__/decky-api';
-import { rememberUrl } from '../lib/url-history';
+import {
+  rememberUrl,
+  rememberPageTitle,
+  getUrlHistory,
+  URL_HISTORY_TITLES_KEY,
+} from '../lib/url-history';
 import { toLocalFileUrl } from '../lib/local-files';
 
 vi.mock('../hooks/global-state', () => ({ useGlobalState: vi.fn() }));
 vi.mock('@decky/ui', () => ({
-  ConfirmModal: ({ children, onOK }: { children: ReactNode; onOK: () => void }) => (
+  DialogButton: (props: ComponentProps<'button'>) => <button {...props} />,
+  Focusable: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock('./panel-dialog', () => ({
+  PanelDialog: ({ children, onOK }: { children: ReactNode; onOK: () => void }) => (
     <div>
       <button onClick={onOK}>关闭</button>
       {children}
     </div>
   ),
-  DialogButton: (props: ComponentProps<'button'>) => <button {...props} />,
 }));
 
 describe('browsing history picker', () => {
@@ -44,8 +53,11 @@ describe('browsing history picker', () => {
 
   it('opens a recent website', async () => {
     rememberUrl(localStorage, 'https://recent.example/');
+    rememberPageTitle(localStorage, 'https://recent.example/', '攻略网页标题');
     const close = vi.fn();
     const { unmount } = render(<UrlHistoryModal closeModal={close} />);
+    expect(screen.getByText('攻略网页标题')).toBeTruthy();
+    expect(screen.queryByText('https://recent.example/')).toBeNull();
     await act(async () => fireEvent.click(screen.getByRole('button', { name: '打开历史记录 1' })));
     expect(state.url).toBe('https://recent.example/');
     expect(close).toHaveBeenCalledOnce();
@@ -91,5 +103,24 @@ describe('browsing history picker', () => {
       resolve({ url: 'http://127.0.0.1/viewer/test' });
     });
     expect(state.url).toBe('https://current.example/');
+  });
+
+  it('deletes only the selected history and title, without navigating or closing', () => {
+    rememberUrl(localStorage, 'https://first.example/');
+    rememberPageTitle(localStorage, 'https://first.example/', '第一条');
+    rememberUrl(localStorage, '/tmp/中文图片.JPG');
+    const close = vi.fn();
+    render(<UrlHistoryModal closeModal={close} />);
+    fireEvent.click(screen.getByRole('button', { name: '删除历史记录 2' }));
+    expect(screen.queryByText('第一条')).toBeNull();
+    expect(getUrlHistory(localStorage)).toEqual([
+      'file:///tmp/%E4%B8%AD%E6%96%87%E5%9B%BE%E7%89%87.JPG',
+    ]);
+    expect(localStorage.getItem(URL_HISTORY_TITLES_KEY)).not.toContain('first.example');
+    expect(close).not.toHaveBeenCalled();
+    expect(state.url).toBe('https://current.example/');
+    fireEvent.click(screen.getByRole('button', { name: '删除历史记录 1' }));
+    expect(screen.getByText('还没有浏览记录。')).toBeTruthy();
+    expect(prepareLocalFileMock).not.toHaveBeenCalled();
   });
 });

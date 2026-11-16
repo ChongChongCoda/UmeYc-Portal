@@ -3,7 +3,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="same-origin">
-<title>Portal · 扫码输入网址</title>
+<title>UmeYc-Portal · 扫码传送</title>
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; padding: 48px 20px; background: #171a21; color: #fff; font: 16px/1.6 system-ui, sans-serif; }
@@ -15,17 +15,29 @@
   input:focus { outline: 2px solid #80cfff; }
   button { width: 100%; margin-top: 16px; padding: 14px; border: 0; border-radius: 8px; background: #1a9fff; color: #fff; font: inherit; font-weight: 600; }
   #message { color: #80cfff; }
+  hr { border: 0; border-top: 1px solid #3d4758; margin: 28px 0; }
+  button:disabled { opacity: .55; }
   small { display: block; margin-top: 24px; color: #9aa8ba; }
 </style>
 <main>
-  <h1>扫码输入网址</h1>
-  <p>填写攻略网页或图片地址，发送后会在 Steam Deck 的 Portal 中打开。</p>
+  <h1>扫码传送</h1>
+  <p>发送网址或上传本地图片，完成后会在 Steam Deck 的 Portal 中打开。</p>
   <p id="message" role="status">{{MESSAGE}}</p>
-  <form method="post" style="display: {{FORM_DISPLAY}}">
+  <section id="forms" style="display: {{FORM_DISPLAY}}">
+  <form id="url-form" method="post">
     <label for="url">网址</label>
     <input id="url" name="url" type="text" inputmode="url" autocomplete="url" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="4096" placeholder="https://example.com/guide" required>
-    <button type="submit">发送到 Deck</button>
+    <button type="submit">发送网址</button>
   </form>
-  <small>请保持 Deck 上的扫码窗口打开。二维码 5 分钟内有效，每次只能发送一个网址。</small>
+  <hr>
+  <form id="image-form">
+    <label for="image">本地图片</label>
+    <input id="image" name="image" type="file" accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,.avif,.ico" required>
+    <button id="upload" type="submit">上传图片</button>
+    <p>每张不超过 64 MB。保存位置可在 Deck 的扫码窗口中选择。</p>
+  </form>
+  </section>
+  <small>请保持 Deck 上的扫码窗口打开。二维码 5 分钟内有效，每次可发送一个网址或一张图片。</small>
 </main>
+<script src="{{UPLOAD_SCRIPT}}" defer></script>
 </html>

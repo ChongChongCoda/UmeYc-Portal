@@ -99,6 +99,11 @@ class WebScroller:
         self._validate_url(url)
         await self._run(self._space(url))
 
+    async def fullscreen(self, url):
+        self._validate_url(url)
+        key = {"key": "f", "code": "KeyF", "windowsVirtualKeyCode": 70, "nativeVirtualKeyCode": 70}
+        await self._run(self._key(url, key))
+
     async def _run(self, operation):
         async with self._lock:
             try:
@@ -115,8 +120,11 @@ class WebScroller:
         })
 
     async def _space(self, url):
-        await self._ensure_page(url)
         key = {"key": " ", "code": "Space", "windowsVirtualKeyCode": 32, "nativeVirtualKeyCode": 32}
+        await self._key(url, key)
+
+    async def _key(self, url, key):
+        await self._ensure_page(url)
         try:
             await self._request("Input.dispatchKeyEvent", {"type": "keyDown", **key})
         finally:

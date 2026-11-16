@@ -9,6 +9,11 @@ import { localPathFromUrl, prepareLocalFile } from '../lib/local-files';
 import { getOpenSideMenu, isVirtualKeyboardShowing } from '../lib/menu-state';
 import { ReaderInput } from './reader-input';
 import { WebHeader, WEB_HEADER_HEIGHT } from './web-header';
+import { rememberPageTitle } from '../lib/url-history';
+import { UrlModal } from './url-modal';
+import { PhoneUrlModal } from './phone-url-modal';
+import { UrlHistoryModal } from './url-history-modal';
+import { LocalFilesModal } from './local-files-modal';
 import { SCREEN_HEIGHT, SCREEN_WIDTH, ViewMode } from '../lib/util';
 
 interface BrowserProps {
@@ -36,6 +41,9 @@ interface BrowserViewHandle {
   Destroy(): void;
   URL?: string;
   Title?: string;
+  BIsLoadingURL?(): boolean;
+  StartRequestCallbacks?: { Register(callback: () => void): { Unregister(): void } };
+  FinishedRequestCallbacks?: { Register(callback: () => void): { Unregister(): void } };
 }
 
 interface MainWindowInstance {
@@ -88,6 +96,7 @@ const Browser = ({
   pageTitle,
 }: BrowserProps) => {
   useUIComposition(UIComposition.Notification);
+  const [, , stateContext] = useGlobalState();
   const web = /^https?:\/\//i.test(url);
 
   const [handles] = useState<{ browser: BrowserHandle; view: BrowserViewHandle } | null>(() => {
@@ -108,6 +117,39 @@ const Browser = ({
       browser,
     };
   });
+
+  const [titleReadyFor, setTitleReadyFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (!web || !handles) return;
+    let active = true;
+    const start = handles.view.StartRequestCallbacks?.Register(() => {
+      if (active) setTitleReadyFor(null);
+    });
+    const finish = handles.view.FinishedRequestCallbacks?.Register(() => {
+      if (active && !handles.view.BIsLoadingURL?.()) setTitleReadyFor(url);
+    });
+    return () => {
+      active = false;
+      start?.Unregister();
+      finish?.Unregister();
+    };
+  }, [url, handles, web]);
+
+  useEffect(() => {
+    if (titleReadyFor === url && handles && !handles.view.BIsLoadingURL?.()) {
+      const title = (handles.view.Title || pageTitle || '').trim();
+      rememberPageTitle(localStorage, url, title);
+      // Share only a completed page's title; the address remains the navigation key.
+      const current = stateContext?.get();
+      if (
+        title &&
+        current?.url === url &&
+        (current.pageTitle !== title || current.pageTitleUrl !== url)
+      ) {
+        stateContext.set({ ...current, pageTitle: title, pageTitleUrl: url });
+      }
+    }
+  }, [url, handles, pageTitle, titleReadyFor, stateContext]);
 
   const previousPlayback = useRef({ url, sidebarOpen, playbackSpace });
   useEffect(() => {
@@ -334,8 +376,16 @@ const useDeckComponentBounds = () => {
 
 export const PortalView = () => {
   const { nav, qam, virtualKeyboard, qamOpen, dropdownOpen, pageTitle } = useDeckComponentBounds();
-  const [{ url, visible, sidebarVideoSpace }] = useGlobalState();
-  const readerVisible = visible && !dropdownOpen && qamOpen;
+  const [{ url, visible, sidebarVideoSpace, rightStickFullscreen, activePanel }, setGlobalState] =
+    useGlobalState();
+  const readerVisible = !!url && visible && !activePanel && !dropdownOpen && qamOpen;
+  const closePanel = () =>
+    setGlobalState((state) => ({ ...state, activePanel: undefined, visible: true }));
+  const Panel = activePanel
+    ? { url: UrlModal, phone: PhoneUrlModal, history: UrlHistoryModal, files: LocalFilesModal }[
+        activePanel
+      ]
+    : undefined;
   const localPath = (() => {
     try {
       return localPathFromUrl(url);
@@ -389,28 +439,54 @@ export const PortalView = () => {
 
   return (
     <>
-      <Browser
-        url={url}
-        visible={readerVisible}
-        x={bounds.x}
-        y={bounds.y}
-        width={bounds.width}
-        height={bounds.height}
-        preserveHiddenBounds
-        sidebarOpen={qamOpen}
-        playbackSpace={sidebarVideoSpace === true && /^https?:\/\//i.test(url)}
-        suppressPlayback={dropdownOpen}
-        pageTitle={pageTitle}
-      />
-      {readerVisible && <ReaderInput path={localPath ?? undefined} />}
+      {url && (
+        <Browser
+          url={url}
+          visible={readerVisible}
+          x={bounds.x}
+          y={bounds.y}
+          width={bounds.width}
+          height={bounds.height}
+          preserveHiddenBounds
+          sidebarOpen={qamOpen}
+          playbackSpace={sidebarVideoSpace === true && /^https?:\/\//i.test(url)}
+          suppressPlayback={dropdownOpen || !!activePanel}
+          pageTitle={pageTitle}
+        />
+      )}
+      {readerVisible && (
+        <ReaderInput
+          key={url}
+          path={localPath ?? undefined}
+          fullscreen={rightStickFullscreen === true && /^https?:\/\//i.test(url)}
+        />
+      )}
+      {Panel && (
+        <div
+          aria-label="Portal 左侧面板"
+          style={{
+            position: 'absolute',
+            zIndex: 7001,
+            left: bounds.x,
+            top: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
+            display: qamOpen ? 'block' : 'none',
+            overflow: 'hidden',
+            pointerEvents: 'auto',
+          }}
+        >
+          <Panel closeModal={closePanel} />
+        </div>
+      )}
     </>
   );
 };
 
 export const PortalViewOuter = () => {
-  const [{ viewMode }] = useGlobalState();
+  const [{ viewMode, activePanel }] = useGlobalState();
 
-  if (viewMode === ViewMode.Closed) {
+  if (viewMode === ViewMode.Closed && !activePanel) {
     return null;
   }
 

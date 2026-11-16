@@ -19,6 +19,23 @@ export const LOCAL_FILE_EXTENSIONS = [
 
 export const LOCAL_DIRECTORY_KEY = 'portal.localDirectory';
 
+export interface LocalEntry {
+  name: string;
+  path: string;
+  directory: boolean;
+  delete_token: string | null;
+}
+
+export interface LocalListing {
+  directory: string;
+  parent: string;
+  entries: LocalEntry[];
+  truncated: boolean;
+}
+
+export const listLocalFiles = callable<[directory: string], LocalListing>('list_local_files');
+export const deleteLocalFile = callable<[token: string], { path: string }>('delete_local_file');
+
 export const prepareLocalFile = callable<[path: string], { url: string }>('prepare_local_file');
 
 export const toLocalFileUrl = (path: string): string => {

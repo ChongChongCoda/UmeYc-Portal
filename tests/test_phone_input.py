@@ -1,8 +1,11 @@
 import socket
+import base64
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 from urllib.request import Request, urlopen
 
 from main import Plugin
@@ -14,10 +17,15 @@ class PhoneInputTests(unittest.IsolatedAsyncioTestCase):
         self.address = patch('main.lan_address', return_value='127.0.0.1')
         self.address.start()
         self.plugin = Plugin()
+        self.uploads = TemporaryDirectory()
+        self.destination = patch('main.upload_destination', return_value=Path(self.uploads.name))
+        self.destination.start()
 
     async def asyncTearDown(self):
         await self.plugin._unload()
         self.address.stop()
+        self.destination.stop()
+        self.uploads.cleanup()
 
     def post(self, url, value, headers=None):
         return urlopen(Request(url, data=urlencode({'url': value}).encode(),
@@ -29,8 +37,9 @@ class PhoneInputTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.plugin.get_url_input_status(session['session_id']))['status'], 'waiting')
         with urlopen(url) as response:
             page = response.read().decode()
-            self.assertIn('扫码输入网址', page)
-            self.assertNotIn('<script', page)
+            self.assertIn('扫码传送', page)
+            self.assertIn('上传图片', page)
+            self.assertIn(f'/{session["session_id"]}/upload.js', page)
             self.assertEqual(response.headers['Cache-Control'], 'no-store')
             self.assertEqual(response.headers['Referrer-Policy'], 'same-origin')
             self.assertIn('<meta name="referrer" content="same-origin">', page)
@@ -67,6 +76,49 @@ class PhoneInputTests(unittest.IsolatedAsyncioTestCase):
                 urlopen(request)
             self.assertEqual(caught.exception.code, status)
         self.assertEqual((await self.plugin.get_url_input_status(session['session_id']))['status'], 'waiting')
+
+    async def test_image_upload_preserves_chinese_name_and_opens_local_preview(self):
+        session = await self.plugin.start_url_input()
+        image = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=')
+        url = session['url'] + '?upload=1&filename=' + quote('中文攻略.PNG')
+        request = Request(url, data=image, headers={
+            'Content-Type': 'application/octet-stream', 'Origin': session['url'].rsplit('/', 1)[0]})
+        with urlopen(request) as response:
+            self.assertIn('图片已上传', response.read().decode())
+        result = await self.plugin.get_url_input_status(session['session_id'])
+        saved = Path(self.uploads.name).resolve() / '中文攻略.png'
+        self.assertEqual(result, {'status': 'received', 'url': saved.as_uri()})
+        self.assertEqual(saved.read_bytes(), image)
+        preview = await self.plugin.prepare_local_file(str(saved))
+        with urlopen(preview['url']) as response:
+            self.assertIn('中文攻略.png', response.read().decode())
+
+    async def test_upload_rejects_wrong_origin_token_type_and_oversize_without_consuming_session(self):
+        session = await self.plugin.start_url_input()
+        for suffix, data, headers, code in [
+            ('-wrong?upload=1&filename=a.png', b'\x89PNG\r\n\x1a\n', {}, 404),
+            ('?upload=1&filename=a.png', b'\x89PNG\r\n\x1a\n', {'Origin': 'https://other.example'}, 403),
+            ('?upload=1&filename=a.html', b'<html>', {}, 400),
+            ('?upload=1&filename=a.png', b'PNG', {'Content-Length': str(65 * 1024 * 1024)}, 400),
+            ('?upload=1&filename=a.png', b'not an image', {}, 400),
+        ]:
+            with self.subTest(suffix=suffix, code=code), self.assertRaises(HTTPError) as caught:
+                urlopen(Request(session['url'] + suffix, data=data, headers=headers), timeout=3)
+            self.assertEqual(caught.exception.code, code)
+        self.assertEqual(list(Path(self.uploads.name).iterdir()), [])
+        self.assertEqual((await self.plugin.get_url_input_status(session['session_id']))['status'], 'waiting')
+        with self.post(session['url'], 'https://still-works.example/'):
+            pass
+
+    async def test_uploading_status_keeps_listener_open_and_url_cannot_win_upload_race(self):
+        session = await self.plugin.start_url_input()
+        self.plugin._phone._receiving = True
+        self.assertEqual(await self.plugin.get_url_input_status(session['session_id']), {'status': 'uploading'})
+        self.assertTrue(self.plugin._phone._thread.is_alive())
+        with self.assertRaises(HTTPError) as caught:
+            self.post(session['url'], 'https://race.example/')
+        self.assertEqual(caught.exception.code, 409)
+        self.plugin._phone._receiving = False
 
     async def test_rejects_unsafe_urls_without_consuming_session(self):
         session = await self.plugin.start_url_input()

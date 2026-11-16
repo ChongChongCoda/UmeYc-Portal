@@ -10,8 +10,14 @@ vi.mock('../lib/menu-state', () => ({
   isVirtualKeyboardShowing: vi.fn(),
 }));
 vi.mock('./reader-input', () => ({ ReaderInput: () => <div data-testid="reader-input" /> }));
+vi.mock('./url-modal', () => ({ UrlModal: () => <div>url panel</div> }));
+vi.mock('./phone-url-modal', () => ({ PhoneUrlModal: () => <div>phone panel</div> }));
+vi.mock('./url-history-modal', () => ({ UrlHistoryModal: () => <div>history panel</div> }));
+vi.mock('./local-files-modal', () => ({ LocalFilesModal: () => <div>files panel</div> }));
 
 import { PortalView, PortalViewOuter } from './portal-view';
+import { StateManager } from 'cotton-box';
+import { rememberUrl, historyLabel } from '../lib/url-history';
 import { useGlobalState } from '../hooks/global-state';
 import { Position, ViewMode } from '../lib/util';
 
@@ -101,6 +107,28 @@ describe('PortalView and PortalViewOuter', () => {
       },
     },
   });
+
+  it.each(['url', 'phone', 'history', 'files'] as const)(
+    'shows %s only in the left reader area while keeping QAM open',
+    (activePanel) => {
+      getGamepadNavigationTrees.mockReturnValue([qamTree()]);
+      vi.mocked(useGlobalState).mockReturnValue([
+        { ...createState(ViewMode.Sidebar), activePanel },
+        vi.fn(),
+      ] as never);
+      const { getByLabelText, queryByTestId } = render(<PortalView />);
+      expect(getByLabelText('Portal 左侧面板')).toHaveStyle({
+        left: '0px',
+        top: '0px',
+        width: '534px',
+        height: '534px',
+      });
+      expect(getByLabelText('Portal 左侧面板')).toHaveTextContent(`${activePanel} panel`);
+      expect(setVisible).toHaveBeenLastCalledWith(false);
+      expect(queryByTestId('reader-input')).toBeNull();
+      expect(getOpenSideMenu()).toBe(2);
+    },
+  );
 
   it('sends space on sidebar edges only and pauses before hiding', async () => {
     vi.useFakeTimers();
@@ -535,5 +563,56 @@ describe('PortalView and PortalViewOuter', () => {
     expect(useUIComposition).toHaveBeenCalledWith(1);
     unmount();
     expect(destroy).toHaveBeenCalledOnce();
+  });
+  it('saves titles only after the matching page finishes, including redirects and dynamic titles', () => {
+    let started!: () => void;
+    let finished!: () => void;
+    let title = '上一个网页';
+    let loading = true;
+    const unregister = vi.fn();
+    const state = createState(ViewMode.Sidebar);
+    const manager = new StateManager(state);
+    rememberUrl(localStorage, state.url);
+    createBrowserView.mockReturnValue({
+      GetBrowser: () => ({ SetVisible: setVisible, SetBounds: setBounds }),
+      LoadURL: loadURL,
+      Destroy: destroy,
+      get Title() {
+        return title;
+      },
+      BIsLoadingURL: () => loading,
+      StartRequestCallbacks: {
+        Register: (fn: () => void) => {
+          started = fn;
+          return { Unregister: unregister };
+        },
+      },
+      FinishedRequestCallbacks: {
+        Register: (fn: () => void) => {
+          finished = fn;
+          return { Unregister: unregister };
+        },
+      },
+    });
+    vi.mocked(useGlobalState).mockReturnValue([state, vi.fn(), manager] as never);
+    const { rerender, unmount } = render(<PortalView />);
+    expect(historyLabel(localStorage, state.url)).toBe('未命名网页');
+    act(() => started());
+    title = '重定向后的中文标题';
+    loading = false;
+    act(() => finished());
+    expect(historyLabel(localStorage, state.url)).toBe(title);
+    expect(manager.get()).toMatchObject({ pageTitle: title, pageTitleUrl: state.url });
+    const next = { ...state, url: 'https://second.example/' };
+    rememberUrl(localStorage, next.url);
+    manager.set(next);
+    vi.mocked(useGlobalState).mockReturnValue([next, vi.fn(), manager] as never);
+    rerender(<PortalView />);
+    expect(historyLabel(localStorage, next.url)).toBe('未命名网页');
+    title = '第二页标题';
+    act(() => finished());
+    expect(historyLabel(localStorage, next.url)).toBe('第二页标题');
+    unmount();
+    expect(unregister).toHaveBeenCalledTimes(4);
   });
 });

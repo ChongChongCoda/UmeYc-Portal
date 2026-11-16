@@ -14,6 +14,10 @@ export interface State {
   url: string;
   controlBar: boolean;
   sidebarVideoSpace?: boolean;
+  rightStickFullscreen?: boolean;
+  activePanel?: 'url' | 'phone' | 'history' | 'files';
+  pageTitle?: string;
+  pageTitleUrl?: string;
 }
 
 export const GlobalContext = createContext(new StateManager<State>({} as State));

@@ -12,6 +12,37 @@ const useAxesFeed: ((index: number) => AxesState | undefined) | undefined = find
   (value: unknown) =>
     typeof value === 'function' && value.toString().includes('useControllerAxesFeed'),
 );
+const useButtonFeed: ((index: number) => { bRightStickClick?: boolean } | undefined) | undefined =
+  findModuleExport(
+    (value: unknown) =>
+      typeof value === 'function' && value.toString().includes('useControllerButtonFeed'),
+  );
+
+const fullscreenWeb = callable<[url: string], void>('toggle_web_fullscreen');
+
+const FullscreenInput = ({ controllerIndex }: { controllerIndex: number }) => {
+  const buttons = useButtonFeed!(controllerIndex);
+  // A stick already held while enabling/opening must be released first.
+  const previous = useRef(true);
+  const inFlight = useRef(false);
+  const pressed = buttons?.bRightStickClick;
+  useEffect(() => {
+    if (pressed === undefined) return;
+    const trigger = pressed && !previous.current;
+    previous.current = pressed;
+    const page = webPage();
+    if (!trigger || inFlight.current || !page) return;
+    inFlight.current = true;
+    void fullscreenWeb(page.url)
+      .catch((error: unknown) =>
+        toaster.toast({ title: '视频全屏快捷键发送失败', body: String(error) }),
+      )
+      .finally(() => {
+        inFlight.current = false;
+      });
+  }, [pressed]);
+  return null;
+};
 
 const setMotion = callable<[path: string, x: number, y: number], void>('set_reader_motion');
 const scrollWebPage = callable<
@@ -84,14 +115,26 @@ const NativeReaderInput = ({
   return null;
 };
 
-export const ReaderInput = ({ path }: { path?: string }) => {
+export const ReaderInput = ({
+  path,
+  fullscreen = false,
+}: {
+  path?: string;
+  fullscreen?: boolean;
+}) => {
   const [controllerIndex, setControllerIndex] = useState(getActiveControllerIndex);
   useEffect(() => {
     const timer = setInterval(() => setControllerIndex(getActiveControllerIndex()), 250);
     return () => clearInterval(timer);
   }, []);
 
-  return useAxesFeed && controllerIndex !== undefined ? (
-    <NativeReaderInput path={path} controllerIndex={controllerIndex} />
-  ) : null;
+  if (controllerIndex === undefined) return null;
+  return (
+    <>
+      {useAxesFeed && <NativeReaderInput path={path} controllerIndex={controllerIndex} />}
+      {!path && fullscreen && useButtonFeed && (
+        <FullscreenInput key={controllerIndex} controllerIndex={controllerIndex} />
+      )}
+    </>
+  );
 };

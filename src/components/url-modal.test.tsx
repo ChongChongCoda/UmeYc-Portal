@@ -11,7 +11,13 @@ vi.mock('../hooks/global-state', () => ({
 }));
 
 vi.mock('@decky/ui', () => ({
-  ConfirmModal: ({
+  TextField: ({ value, onChange }: { value: string; onChange: (e: unknown) => void }) => (
+    <input aria-label="url" value={value} onChange={onChange} />
+  ),
+}));
+
+vi.mock('./panel-dialog', () => ({
+  PanelDialog: ({
     children,
     onOK,
     onCancel,
@@ -25,9 +31,6 @@ vi.mock('@decky/ui', () => ({
       <button onClick={onCancel}>Cancel</button>
       {children}
     </div>
-  ),
-  TextField: ({ value, onChange }: { value: string; onChange: (e: unknown) => void }) => (
-    <input aria-label="url" value={value} onChange={onChange} />
   ),
 }));
 

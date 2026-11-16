@@ -19,6 +19,8 @@ from urllib.parse import urlsplit
 # Decky loads main.py by filename rather than importing a plugin package.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from phone_input import PhoneInputSession, lan_address
+from image_upload import upload_destination, ensure_upload_directory
+from local_library import LocalLibrary
 from web_scroll import WebScroller
 
 
@@ -227,6 +229,7 @@ class Plugin:
         self._phone = None
         self._phone_lock = asyncio.Lock()
         self._web_scroller = WebScroller()
+        self._library = LocalLibrary(SUPPORTED_EXTENSIONS)
 
     def _start(self):
         if self._server is None:
@@ -252,6 +255,38 @@ class Plugin:
             raise ValueError("文件不存在或无法读取，请检查 SD 卡后重新选择") from error
         self._start()
         return {"url": self._server.authorize(selected)}
+
+    async def list_local_files(self, directory: str):
+        try:
+            return self._library.list(directory)
+        except OSError as error:
+            raise ValueError("无法读取文件夹，请检查存储设备或重新选择位置") from error
+
+    async def delete_local_file(self, token: str):
+        try:
+            path = self._library.delete(token)
+        except OSError as error:
+            raise ValueError("文件不存在或无法删除，请刷新列表后重试") from error
+        if self._server is not None:
+            with self._server.grants_lock:
+                selected = Path(path)
+                self._server.reader_states.pop(selected, None)
+                for grant, granted in list(self._server.grants.items()):
+                    if granted == selected:
+                        self._server.grants.pop(grant)
+                        for listener in self._server.listeners.get(grant, []):
+                            if listener.full():
+                                listener.get_nowait()
+                            listener.put_nowait(None)
+        return {"path": path}
+
+    async def get_upload_directory(self, directory: str = ""):
+        destination = upload_destination(directory)
+        try:
+            ensure_upload_directory(destination)
+        except OSError as error:
+            raise ValueError("图片保存位置无法使用，请重新选择文件夹") from error
+        return {"directory": str(destination)}
 
     async def _unload(self):
         await self._web_scroller.close()
@@ -279,6 +314,9 @@ class Plugin:
     async def send_web_space(self, url: str):
         await self._web_scroller.space(url)
 
+    async def toggle_web_fullscreen(self, url: str):
+        await self._web_scroller.fullscreen(url)
+
     async def set_reader_motion(self, path: str, x: float, y: float):
         if self._server is None:
             return
@@ -291,23 +329,28 @@ class Plugin:
                 raise ValueError("File has not been selected")
         self._server.motion(selected, x, y)
 
-    async def start_url_input(self):
+    async def start_url_input(self, directory: str = ""):
         async with self._phone_lock:
             if self._phone is not None:
                 await asyncio.to_thread(self._phone.close)
                 self._phone = None
             try:
-                self._phone = PhoneInputSession(lan_address())
+                destination = upload_destination(directory)
+                self._phone = PhoneInputSession(lan_address(), upload_directory=destination)
             except OSError as error:
                 raise ValueError("无法打开扫码输入，请检查网络后重试") from error
-            return {"session_id": self._phone.session_id, "url": self._phone.url, "expires_in": 300}
+            picker_directory = destination
+            while not picker_directory.is_dir():
+                picker_directory = picker_directory.parent
+            return {"session_id": self._phone.session_id, "url": self._phone.url, "expires_in": 300,
+                    "upload_directory": str(destination), "upload_picker_directory": str(picker_directory)}
 
     async def get_url_input_status(self, session_id: str):
         session = self._phone
         if session is None or session.session_id != session_id:
             return {"status": "expired"}
         status = session.status()
-        if status["status"] != "waiting":
+        if status["status"] in {"received", "expired"}:
             await asyncio.to_thread(session.close)
         return status
 

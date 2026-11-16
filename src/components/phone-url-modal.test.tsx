@@ -12,13 +12,22 @@ import {
 
 vi.mock('../hooks/global-state', () => ({ useGlobalState: vi.fn() }));
 vi.mock('@decky/ui', () => ({
-  ConfirmModal: ({ children, onOK }: { children: ReactNode; onOK: () => void }) => (
+  DialogButton: (props: ComponentProps<'button'>) => <button {...props} />,
+}));
+
+vi.mock('./panel-dialog', () => ({
+  PanelDialog: ({ children, onOK }: { children: ReactNode; onOK: () => void }) => (
     <div>
       <button onClick={onOK}>关闭</button>
       {children}
     </div>
   ),
-  DialogButton: (props: ComponentProps<'button'>) => <button {...props} />,
+}));
+
+vi.mock('./folder-picker', () => ({
+  FolderPicker: ({ onChoose }: { onChoose(path: string): void }) => (
+    <button onClick={() => onChoose('/run/media/deck/SD/攻略')}>use folder</button>
+  ),
 }));
 
 const session = { session_id: 'one', url: 'http://192.168.1.10:1234/one', expires_in: 300 };
@@ -53,7 +62,7 @@ describe('QR URL input modal', () => {
     const { unmount } = render(<PhoneUrlModal closeModal={vi.fn()} />);
     expect(state.visible).toBe(false);
     await flush();
-    const qr = screen.getByRole('img', { name: '扫码输入网址二维码' });
+    const qr = screen.getByRole('img', { name: '扫码传送二维码' });
     expect(qr.querySelector('path')?.getAttribute('d')).toMatch(/^M/);
     expect(getUrlInputStatusMock).toHaveBeenCalledWith('one');
     unmount();
@@ -152,7 +161,7 @@ describe('QR URL input modal', () => {
     getUrlInputStatusMock.mockRejectedValueOnce(new Error('断开连接'));
     const { unmount } = render(<PhoneUrlModal closeModal={vi.fn()} />);
     await flush();
-    expect(screen.getByRole('alert')).toHaveTextContent('接收网址失败');
+    expect(screen.getByRole('alert')).toHaveTextContent('接收内容失败');
     expect(cancelUrlInputMock).toHaveBeenCalledWith('one');
     unmount();
   });
@@ -162,6 +171,40 @@ describe('QR URL input modal', () => {
     const { unmount } = render(<PhoneUrlModal closeModal={close} />);
     await flush();
     fireEvent.click(screen.getByText('关闭'));
+    expect(close).toHaveBeenCalledOnce();
+    unmount();
+  });
+
+  it('remembers a selected save folder and can restore automatic SD preference', async () => {
+    const { unmount } = render(<PhoneUrlModal closeModal={vi.fn()} />);
+    await flush();
+    expect(startUrlInputMock).toHaveBeenCalledWith('');
+    fireEvent.click(screen.getByRole('button', { name: '选择图片保存位置' }));
+    await flush();
+    fireEvent.click(screen.getByText('use folder'));
+    await flush();
+    expect(startUrlInputMock).toHaveBeenLastCalledWith('/run/media/deck/SD/攻略');
+    expect(localStorage.getItem('portal.uploadDirectory')).toBe('/run/media/deck/SD/攻略');
+    fireEvent.click(screen.getByText('恢复自动选择（优先 SD 卡）'));
+    await flush();
+    expect(startUrlInputMock).toHaveBeenLastCalledWith('');
+    expect(localStorage.getItem('portal.uploadDirectory')).toBeNull();
+    unmount();
+  });
+
+  it('keeps polling during upload and opens a received Chinese local file', async () => {
+    const url = 'file:///run/media/deck/SD/%E6%94%BB%E7%95%A5.png';
+    getUrlInputStatusMock
+      .mockResolvedValueOnce({ status: 'uploading' })
+      .mockResolvedValueOnce({ status: 'received', url });
+    const close = vi.fn();
+    const { unmount } = render(<PhoneUrlModal closeModal={close} />);
+    await flush();
+    expect(screen.getByRole('status')).toHaveTextContent('正在接收图片');
+    expect(screen.getByRole('button', { name: '选择图片保存位置' })).toBeDisabled();
+    expect(cancelUrlInputMock).not.toHaveBeenCalled();
+    await act(async () => vi.advanceTimersByTimeAsync(1000));
+    expect(state.url).toBe(url);
     expect(close).toHaveBeenCalledOnce();
     unmount();
   });

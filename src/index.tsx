@@ -21,6 +21,7 @@ export default definePlugin(() => {
     url: 'https://netflix.com',
     controlBar: false,
     sidebarVideoSpace: false,
+    rightStickFullscreen: false,
   };
 
   const state = new StateManager<State>({
@@ -29,10 +30,10 @@ export default definePlugin(() => {
   });
 
   let lastUrl: string | undefined;
-  state.watch(({ position, margin, size, url, sidebarVideoSpace }) => {
+  state.watch(({ position, margin, size, url, sidebarVideoSpace, rightStickFullscreen }) => {
     localStorage.setItem(
       PORTAL_STORAGE_KEY,
-      JSON.stringify({ position, margin, size, url, sidebarVideoSpace }),
+      JSON.stringify({ position, margin, size, url, sidebarVideoSpace, rightStickFullscreen }),
     );
     if (url !== lastUrl) {
       lastUrl = url;

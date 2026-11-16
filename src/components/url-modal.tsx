@@ -1,4 +1,5 @@
-import { TextField, ConfirmModal, ModalRootProps } from '@decky/ui';
+import { TextField, ModalRootProps } from '@decky/ui';
+import { PanelDialog } from './panel-dialog';
 import { useEffect, useState } from 'react';
 
 import { modalWithState } from './modal';
@@ -24,7 +25,7 @@ export const UrlModal = (props: ModalRootProps) => {
   }, []);
 
   return (
-    <ConfirmModal
+    <PanelDialog
       {...props}
       strTitle="攻略网址或图片地址"
       strOKButtonText="确定"
@@ -35,12 +36,14 @@ export const UrlModal = (props: ModalRootProps) => {
           visible: true,
           url: field,
         }));
+        props.closeModal?.();
       }}
       onCancel={() => {
         setGlobalState((state) => ({
           ...state,
           visible: true,
         }));
+        props.closeModal?.();
       }}
     >
       <TextField
@@ -48,7 +51,7 @@ export const UrlModal = (props: ModalRootProps) => {
         value={field}
         onChange={(e) => setField(e.target.value)}
       />
-    </ConfirmModal>
+    </PanelDialog>
   );
 };
 
