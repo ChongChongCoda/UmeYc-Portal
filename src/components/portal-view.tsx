@@ -9,7 +9,7 @@ import { localPathFromUrl, prepareLocalFile } from '../lib/local-files';
 import { getOpenSideMenu, isVirtualKeyboardShowing } from '../lib/menu-state';
 import { ReaderInput } from './reader-input';
 import { WebHeader, WEB_HEADER_HEIGHT } from './web-header';
-import { rememberPageTitle } from '../lib/url-history';
+import { rememberPageTitle, rememberUrl, removeUrl } from '../lib/url-history';
 import { UrlModal } from './url-modal';
 import { PhoneUrlModal } from './phone-url-modal';
 import { UrlHistoryModal } from './url-history-modal';
@@ -80,7 +80,10 @@ interface DeckWindow {
   outerHeight?: number;
 }
 
-const sendWebSpace = callable<[url: string], void>('send_web_space');
+const sendWebSpace = callable<[url: string, title: string], void>('send_web_space');
+const getWebPageState = callable<[url: string, title: string], { url: string; title: string }>(
+  'get_web_page_state',
+);
 
 const Browser = ({
   url,
@@ -118,38 +121,8 @@ const Browser = ({
     };
   });
 
-  const [titleReadyFor, setTitleReadyFor] = useState<string | null>(null);
-  useEffect(() => {
-    if (!web || !handles) return;
-    let active = true;
-    const start = handles.view.StartRequestCallbacks?.Register(() => {
-      if (active) setTitleReadyFor(null);
-    });
-    const finish = handles.view.FinishedRequestCallbacks?.Register(() => {
-      if (active && !handles.view.BIsLoadingURL?.()) setTitleReadyFor(url);
-    });
-    return () => {
-      active = false;
-      start?.Unregister();
-      finish?.Unregister();
-    };
-  }, [url, handles, web]);
-
-  useEffect(() => {
-    if (titleReadyFor === url && handles && !handles.view.BIsLoadingURL?.()) {
-      const title = (handles.view.Title || pageTitle || '').trim();
-      rememberPageTitle(localStorage, url, title);
-      // Share only a completed page's title; the address remains the navigation key.
-      const current = stateContext?.get();
-      if (
-        title &&
-        current?.url === url &&
-        (current.pageTitle !== title || current.pageTitleUrl !== url)
-      ) {
-        stateContext.set({ ...current, pageTitle: title, pageTitleUrl: url });
-      }
-    }
-  }, [url, handles, pageTitle, titleReadyFor, stateContext]);
+  const observedUrl = useRef<string | null>(null);
+  const pendingNavigation = useRef<string | null>(url);
 
   const previousPlayback = useRef({ url, sidebarOpen, playbackSpace });
   useEffect(() => {
@@ -177,7 +150,7 @@ const Browser = ({
     // that short transition so a dropdown can suppress the pending key.
     const timer = setTimeout(() => {
       previousPlayback.current = { url, sidebarOpen, playbackSpace };
-      void sendWebSpace(handles.view.URL || url)
+      void sendWebSpace(handles.view.URL || url, handles.view.Title || '')
         .catch((error: unknown) =>
           toaster.toast({ title: '网页空格快捷键发送失败', body: String(error) }),
         )
@@ -193,6 +166,11 @@ const Browser = ({
 
   useEffect(() => {
     if (!handles) return;
+    // A pushState/replaceState observation updates settings and persistence,
+    // but must never reload the video that is already playing.
+    if (observedUrl.current === url) return;
+    observedUrl.current = null;
+    pendingNavigation.current = url;
     let cancelled = false;
     try {
       const path = localPathFromUrl(url);
@@ -217,6 +195,62 @@ const Browser = ({
   }, [url, handles]);
 
   useEffect(() => {
+    if (!web || !handles || !visible || !stateContext) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        if (!handles.view.BIsLoadingURL?.()) {
+          const nativeUrl = handles.view.URL || url;
+          const nativeTitle = handles.view.Title || '';
+          const page = await getWebPageState(nativeUrl, nativeTitle);
+          const current = stateContext.get();
+          if (
+            active &&
+            current.url === url &&
+            !handles.view.BIsLoadingURL?.() &&
+            nativeUrl === (handles.view.URL || url) &&
+            nativeTitle === (handles.view.Title || '') &&
+            /^https?:\/\//i.test(page.url)
+          ) {
+            if (page.url !== url) {
+              // Resolve an initial short link into one history item. Later
+              // episode switches retain the previous episode as a separate item.
+              if (pendingNavigation.current === url) removeUrl(localStorage, url);
+              observedUrl.current = page.url;
+              rememberUrl(localStorage, page.url);
+            }
+            pendingNavigation.current = null;
+            rememberPageTitle(localStorage, page.url, page.title);
+            if (
+              current.url !== page.url ||
+              current.pageTitle !== page.title ||
+              current.pageTitleUrl !== page.url
+            ) {
+              stateContext.set({
+                ...current,
+                url: page.url,
+                pageTitle: page.title,
+                pageTitleUrl: page.url,
+              });
+            }
+          }
+        }
+      } catch {
+        // Navigation can temporarily remove its debugger target. Retry the
+        // next snapshot; never write a previous page's title to a new address.
+      } finally {
+        if (active) timer = setTimeout(() => void poll(), 1000);
+      }
+    };
+    timer = setTimeout(() => void poll(), 250);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [url, handles, web, visible, stateContext]);
+
+  useEffect(() => {
     if (preserveHiddenBounds && !visible) return;
     handles?.browser.SetBounds(
       x,
@@ -234,6 +268,7 @@ const Browser = ({
     <WebHeader
       title={pageTitle || ''}
       getUrl={() => handles.view.URL || url}
+      getTitle={() => handles.view.Title || ''}
       x={x}
       y={y}
       width={width}
@@ -375,9 +410,18 @@ const useDeckComponentBounds = () => {
 };
 
 export const PortalView = () => {
-  const { nav, qam, virtualKeyboard, qamOpen, dropdownOpen, pageTitle } = useDeckComponentBounds();
-  const [{ url, visible, sidebarVideoSpace, rightStickFullscreen, activePanel }, setGlobalState] =
-    useGlobalState();
+  const {
+    nav,
+    qam,
+    virtualKeyboard,
+    qamOpen,
+    dropdownOpen,
+    pageTitle: nativeTitle,
+  } = useDeckComponentBounds();
+  const [
+    { url, visible, sidebarVideoSpace, rightStickFullscreen, activePanel, pageTitle, pageTitleUrl },
+    setGlobalState,
+  ] = useGlobalState();
   const readerVisible = !!url && visible && !activePanel && !dropdownOpen && qamOpen;
   const closePanel = () =>
     setGlobalState((state) => ({ ...state, activePanel: undefined, visible: true }));
@@ -451,7 +495,7 @@ export const PortalView = () => {
           sidebarOpen={qamOpen}
           playbackSpace={sidebarVideoSpace === true && /^https?:\/\//i.test(url)}
           suppressPlayback={dropdownOpen || !!activePanel}
-          pageTitle={pageTitle}
+          pageTitle={pageTitleUrl === url ? pageTitle || nativeTitle : nativeTitle}
         />
       )}
       {readerVisible && (

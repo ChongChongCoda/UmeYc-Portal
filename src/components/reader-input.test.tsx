@@ -76,6 +76,7 @@ describe('right stick reader input', () => {
     Object.assign(window, {
       portal: {
         URL: 'https://guide.example/chapter',
+        Title: '第二集',
         GetBrowser: () => ({ GetBounds: () => ({ width: 506, height: 534 }) }),
       },
     });
@@ -90,6 +91,7 @@ describe('right stick reader input', () => {
       1,
       506,
       534,
+      '第二集',
     );
     expect(setReaderMotionMock).not.toHaveBeenCalled();
     useAxesMock.mockReturnValue({ RightJoystick: { x: 0, y: 0 } });
@@ -129,6 +131,7 @@ describe('right stick reader input', () => {
     Object.assign(window, {
       portal: {
         URL: 'https://video.example/',
+        Title: '视频第二集',
         GetBrowser: () => ({ GetBounds: () => ({ width: 506, height: 500 }) }),
       },
     });
@@ -141,7 +144,10 @@ describe('right stick reader input', () => {
     rerender(<ReaderInput fullscreen />);
     useButtonsMock.mockReturnValue({ bRightStickClick: true });
     await act(async () => rerender(<ReaderInput fullscreen />));
-    expect(toggleWebFullscreenMock).toHaveBeenCalledExactlyOnceWith('https://video.example/');
+    expect(toggleWebFullscreenMock).toHaveBeenCalledExactlyOnceWith(
+      'https://video.example/',
+      '视频第二集',
+    );
     rerender(<ReaderInput fullscreen />);
     expect(toggleWebFullscreenMock).toHaveBeenCalledTimes(1);
     useButtonsMock.mockReturnValue({ bRightStickClick: false });

@@ -4,7 +4,7 @@ import { FaTrashAlt } from 'react-icons/fa';
 import { useEffect, useState } from 'react';
 import { useGlobalState } from '../hooks/global-state';
 import { editableAddress, localPathFromUrl, prepareLocalFile } from '../lib/local-files';
-import { getUrlHistory, historyLabel, removeUrl } from '../lib/url-history';
+import { getUrlHistory, historyLabel, removeUrl, URL_HISTORY_LIMIT } from '../lib/url-history';
 import { modalWithState } from './modal';
 
 export const UrlHistoryModal = (props: ModalRootProps) => {
@@ -43,7 +43,7 @@ export const UrlHistoryModal = (props: ModalRootProps) => {
   return (
     <PanelDialog
       {...props}
-      strTitle="浏览历史（最近 5 条）"
+      strTitle={`浏览历史（最近 ${URL_HISTORY_LIMIT} 条）`}
       strOKButtonText="关闭"
       bAlertDialog
       onOK={() => props.closeModal?.()}

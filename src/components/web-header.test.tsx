@@ -42,7 +42,7 @@ describe('web page header', () => {
     ] as const) {
       url += '/next';
       await act(async () => fireEvent.click(screen.getByRole('button', { name: label })));
-      expect(zoomWebPageMock).toHaveBeenLastCalledWith(url, action);
+      expect(zoomWebPageMock).toHaveBeenLastCalledWith(url, action, 'Guide');
       expect(screen.getByRole('button', { name: label })).toBeEnabled();
     }
   });

@@ -18,7 +18,7 @@ const useButtonFeed: ((index: number) => { bRightStickClick?: boolean } | undefi
       typeof value === 'function' && value.toString().includes('useControllerButtonFeed'),
   );
 
-const fullscreenWeb = callable<[url: string], void>('toggle_web_fullscreen');
+const fullscreenWeb = callable<[url: string, title: string], void>('toggle_web_fullscreen');
 
 const FullscreenInput = ({ controllerIndex }: { controllerIndex: number }) => {
   const buttons = useButtonFeed!(controllerIndex);
@@ -33,7 +33,7 @@ const FullscreenInput = ({ controllerIndex }: { controllerIndex: number }) => {
     const page = webPage();
     if (!trigger || inFlight.current || !page) return;
     inFlight.current = true;
-    void fullscreenWeb(page.url)
+    void fullscreenWeb(page.url, page.title)
       .catch((error: unknown) =>
         toaster.toast({ title: '视频全屏快捷键发送失败', body: String(error) }),
       )
@@ -46,7 +46,7 @@ const FullscreenInput = ({ controllerIndex }: { controllerIndex: number }) => {
 
 const setMotion = callable<[path: string, x: number, y: number], void>('set_reader_motion');
 const scrollWebPage = callable<
-  [url: string, x: number, y: number, width: number, height: number],
+  [url: string, x: number, y: number, width: number, height: number, title: string],
   void
 >('scroll_web_page');
 const releaseWebScroll = callable<[], void>('release_web_scroll');
@@ -54,10 +54,14 @@ const releaseWebScroll = callable<[], void>('release_web_scroll');
 const webPage = () => {
   const view = (
     window as unknown as {
-      portal?: { URL: string; GetBrowser(): { GetBounds(): { width: number; height: number } } };
+      portal?: {
+        URL: string;
+        Title?: string;
+        GetBrowser(): { GetBounds(): { width: number; height: number } };
+      };
     }
   ).portal;
-  return view && { url: view.URL, ...view.GetBrowser().GetBounds() };
+  return view && { url: view.URL, title: view.Title || '', ...view.GetBrowser().GetBounds() };
 };
 
 export const stickVelocity = (value: number): number => {
@@ -93,7 +97,7 @@ const NativeReaderInput = ({
       inFlight = true;
       const motion = path
         ? setMotion(path, x, y)
-        : scrollWebPage(page!.url, x, y, page!.width, page!.height);
+        : scrollWebPage(page!.url, x, y, page!.width, page!.height, page!.title);
       void motion
         .catch((error: unknown) => {
           if (!path && !reportedError) {

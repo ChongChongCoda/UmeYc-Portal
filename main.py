@@ -302,20 +302,23 @@ class Plugin:
             self._server = None
             self._thread = None
 
-    async def scroll_web_page(self, url: str, x: float, y: float, width: float, height: float):
-        await self._web_scroller.scroll(url, x, y, width, height)
+    async def get_web_page_state(self, url: str, title: str = ""):
+        return await self._web_scroller.page_state(url, title)
+
+    async def scroll_web_page(self, url: str, x: float, y: float, width: float, height: float, title: str = ""):
+        await self._web_scroller.scroll(url, x, y, width, height, title)
 
     async def release_web_scroll(self):
         await self._web_scroller.close()
 
-    async def zoom_web_page(self, url: str, action: str):
-        return await self._web_scroller.zoom(url, action)
+    async def zoom_web_page(self, url: str, action: str, title: str = ""):
+        return await self._web_scroller.zoom(url, action, title)
 
-    async def send_web_space(self, url: str):
-        await self._web_scroller.space(url)
+    async def send_web_space(self, url: str, title: str = ""):
+        await self._web_scroller.space(url, title)
 
-    async def toggle_web_fullscreen(self, url: str):
-        await self._web_scroller.fullscreen(url)
+    async def toggle_web_fullscreen(self, url: str, title: str = ""):
+        await self._web_scroller.fullscreen(url, title)
 
     async def set_reader_motion(self, path: str, x: float, y: float):
         if self._server is None:

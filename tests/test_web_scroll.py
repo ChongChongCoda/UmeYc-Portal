@@ -11,8 +11,9 @@ class WebScrollTests(unittest.IsolatedAsyncioTestCase):
         self.socket.closed = False
         self.socket.receive_json.return_value = {"id": 1, "result": {}}
 
-        async def connect(url):
+        async def connect(url, title=""):
             self.scroller._url = url
+            self.scroller._title = title
             self.scroller._socket = self.socket
 
         self.connect = patch.object(self.scroller, "_connect", side_effect=connect)
@@ -55,7 +56,7 @@ class WebScrollTests(unittest.IsolatedAsyncioTestCase):
         self.socket.receive_json.side_effect = [{"id": 1}, {"id": 2}]
         await self.scroller.fullscreen("https://video.example/")
         calls = [call.args[0] for call in self.socket.send_json.call_args_list]
-        self.connection.assert_awaited_once_with("https://video.example/")
+        self.connection.assert_awaited_once_with("https://video.example/", "")
         self.assertEqual([c["params"]["type"] for c in calls], ["keyDown", "keyUp"])
         self.assertTrue(all(c["params"]["key"] == "f" and c["params"]["code"] == "KeyF"
                             and c["params"]["windowsVirtualKeyCode"] == 70 for c in calls))
@@ -125,3 +126,43 @@ class WebScrollTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.scroller._matching_pages([rewritten, second], original)), 2)
         exact = {"type": "page", "url": original}
         self.assertEqual(self.scroller._matching_pages([exact, rewritten], original), [exact])
+
+    async def test_episode_switch_uses_current_title_and_returns_actual_url(self):
+        old = {"type": "page", "url": "https://video.example/episode/1", "title": "第一集"}
+        new = {"type": "page", "url": "https://video.example/episode/2", "title": "第二集"}
+        unrelated = {**new, "url": "https://other.example/episode/2"}
+        self.socket.receive_json.return_value = {"id": 1, "result": {"result": {
+            "value": {"url": new["url"], "title": "第二集"}}}}
+        with patch.object(self.scroller, "_pages", AsyncMock(return_value=[old, new, unrelated])):
+            page = await self.scroller.page_state(old["url"], "第二集")
+        self.assertEqual(page, {"url": new["url"], "title": "第二集"})
+        self.socket.receive_json.side_effect = [{"id": 2}, {"id": 3}]
+        await self.scroller.space(old["url"], "第二集")
+        self.connection.assert_awaited_once_with(old["url"], "第二集")
+
+    async def test_snapshot_uses_actual_episode_heading_when_browser_title_is_stale(self):
+        page = {"type": "page", "url": "https://www.bilibili.com/video/BV456/", "title": "第一集"}
+        self.socket.receive_json.return_value = {"id": 1, "result": {"result": {
+            "value": {"url": page["url"], "title": "第二集"}}}}
+        with patch.object(self.scroller, "_pages", AsyncMock(return_value=[page])):
+            state = await self.scroller.page_state("https://www.bilibili.com/video/BV123/", "第一集")
+        self.assertEqual(state, {"url": page["url"], "title": "第二集"})
+        expression = self.socket.send_json.call_args.args[0]["params"]["expression"]
+        self.assertIn("h1.video-title", expression)
+        self.assertIn("location.href", expression)
+
+    async def test_title_fallback_rejects_duplicates_other_origins_and_old_title(self):
+        original = "https://video.example/episode/1"
+        page = {"type": "page", "url": "https://video.example/episode/2", "title": "第二集"}
+        for pages in [[page, dict(page)], [{**page, "url": "https://other.example/episode/2"}],
+                      [{**page, "title": "第一集"}]]:
+            with patch.object(self.scroller, "_pages", AsyncMock(return_value=pages)):
+                with self.subTest(pages=pages), self.assertRaises(ValueError):
+                    await self.scroller.page_state(original, "第二集")
+
+    async def test_current_title_change_rebinds_an_existing_input_connection(self):
+        self.socket.receive_json.side_effect = [{"id": i} for i in range(1, 5)]
+        await self.scroller.space("https://video.example/episode/1", "第一集")
+        await self.scroller.space("https://video.example/episode/1", "第二集")
+        self.assertEqual(self.connection.await_count, 2)
+        self.connection.assert_awaited_with("https://video.example/episode/1", "第二集")

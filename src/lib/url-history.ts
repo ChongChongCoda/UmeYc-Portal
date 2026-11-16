@@ -2,6 +2,7 @@ import { addressLabel, localPathFromUrl, toLocalFileUrl } from './local-files';
 
 export const URL_HISTORY_KEY = 'portal.urlHistory';
 export const URL_HISTORY_TITLES_KEY = 'portal.urlHistoryTitles';
+export const URL_HISTORY_LIMIT = 20;
 
 interface HistoryStorage {
   getItem(key: string): string | null;
@@ -14,7 +15,15 @@ const historyAddress = (value: unknown): string | null => {
     const path = localPathFromUrl(value);
     if (path) return toLocalFileUrl(path);
     const parsed = new window.URL(value);
-    return ['http:', 'https:'].includes(parsed.protocol) && !!parsed.hostname ? value : null;
+    if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) return null;
+    // Bilibili rewrites tracking parameters while a video is playing. Keep
+    // video/part identity so visiting the same episode never fills history.
+    const video = parsed.pathname.match(/^\/video\/(BV[\w]+|av\d+)\/?$/);
+    if (parsed.hostname === 'www.bilibili.com' && video) {
+      const part = parsed.searchParams.get('p');
+      return `https://www.bilibili.com/video/${video[1]}/${part && /^\d+$/.test(part) && Number(part) > 1 ? `?p=${Number(part)}` : ''}`;
+    }
+    return value;
   } catch {
     return null;
   }
@@ -26,7 +35,7 @@ export const getUrlHistory = (storage: HistoryStorage): string[] => {
     if (!Array.isArray(values)) return [];
     return [
       ...new Set(values.map(historyAddress).filter((value): value is string => value !== null)),
-    ].slice(0, 5);
+    ].slice(0, URL_HISTORY_LIMIT);
   } catch {
     return [];
   }
@@ -37,7 +46,7 @@ export const rememberUrl = (storage: HistoryStorage, value: string) => {
   if (!address) return;
   const recent = getUrlHistory(storage);
   try {
-    const next = [address, ...recent.filter((url) => url !== address)].slice(0, 5);
+    const next = [address, ...recent.filter((url) => url !== address)].slice(0, URL_HISTORY_LIMIT);
     storage.setItem(URL_HISTORY_KEY, JSON.stringify(next));
     const titles = getHistoryTitles(storage);
     storage.setItem(
@@ -61,6 +70,7 @@ const getHistoryTitles = (storage: HistoryStorage): Record<string, string> => {
     const recent = getUrlHistory(storage);
     return Object.fromEntries(
       Object.entries(values)
+        .map(([url, title]) => [historyAddress(url) || '', title])
         .filter(
           ([url, title]) => recent.includes(url) && /^https?:\/\//i.test(url) && cleanTitle(title),
         )
@@ -71,7 +81,7 @@ const getHistoryTitles = (storage: HistoryStorage): Record<string, string> => {
   }
 };
 
-// Updating metadata never changes the five-item history order or saved address.
+// Updating metadata never changes history order or the saved address.
 export const rememberPageTitle = (storage: HistoryStorage, url: string, title: string) => {
   const address = historyAddress(url);
   const text = cleanTitle(title);
@@ -94,14 +104,14 @@ export const rememberPageTitle = (storage: HistoryStorage, url: string, title: s
 export const historyLabel = (storage: HistoryStorage, url: string): string => {
   if (!url) return '未选择网页';
   if (localPathFromUrl(url)) return addressLabel(url);
-  return getHistoryTitles(storage)[url] || '未命名网页';
+  return getHistoryTitles(storage)[historyAddress(url) || url] || '未命名网页';
 };
 
 export const removeUrl = (storage: HistoryStorage, url: string): boolean => {
   try {
     storage.setItem(
       URL_HISTORY_KEY,
-      JSON.stringify(getUrlHistory(storage).filter((item) => item !== url)),
+      JSON.stringify(getUrlHistory(storage).filter((item) => item !== historyAddress(url))),
     );
   } catch {
     return false;

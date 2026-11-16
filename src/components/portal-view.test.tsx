@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, waitFor } from '@testing-library/react';
 import { Router } from '@decky/ui';
-import { prepareLocalFileMock, sendWebSpaceMock } from '../__mocks__/decky-api';
+import {
+  prepareLocalFileMock,
+  sendWebSpaceMock,
+  getWebPageStateMock,
+} from '../__mocks__/decky-api';
 import { toLocalFileUrl } from '../lib/local-files';
 import { getOpenSideMenu, isVirtualKeyboardShowing } from '../lib/menu-state';
 
@@ -17,7 +21,7 @@ vi.mock('./local-files-modal', () => ({ LocalFilesModal: () => <div>files panel<
 
 import { PortalView, PortalViewOuter } from './portal-view';
 import { StateManager } from 'cotton-box';
-import { rememberUrl, historyLabel } from '../lib/url-history';
+import { rememberUrl, historyLabel, getUrlHistory } from '../lib/url-history';
 import { useGlobalState } from '../hooks/global-state';
 import { Position, ViewMode } from '../lib/util';
 
@@ -67,6 +71,7 @@ const createState = (viewMode: ViewMode, position = Position.TopRight, margin = 
 describe('PortalView and PortalViewOuter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getWebPageStateMock.mockReset();
     vi.mocked(getOpenSideMenu).mockReturnValue(2);
     vi.mocked(isVirtualKeyboardShowing).mockReturnValue(undefined);
 
@@ -155,7 +160,7 @@ describe('PortalView and PortalViewOuter', () => {
       await act(async () => {
         vi.advanceTimersByTime(200);
       });
-      expect(sendWebSpaceMock).toHaveBeenCalledWith('https://netflix.com');
+      expect(sendWebSpaceMock).toHaveBeenCalledWith('https://netflix.com', '');
       expect(setVisible).toHaveBeenLastCalledWith(true);
       await act(async () => {
         finishPause();
@@ -564,55 +569,114 @@ describe('PortalView and PortalViewOuter', () => {
     unmount();
     expect(destroy).toHaveBeenCalledOnce();
   });
-  it('saves titles only after the matching page finishes, including redirects and dynamic titles', () => {
-    let started!: () => void;
-    let finished!: () => void;
-    let title = '上一个网页';
-    let loading = true;
-    const unregister = vi.fn();
-    const state = createState(ViewMode.Sidebar);
-    const manager = new StateManager(state);
-    rememberUrl(localStorage, state.url);
-    createBrowserView.mockReturnValue({
-      GetBrowser: () => ({ SetVisible: setVisible, SetBounds: setBounds }),
-      LoadURL: loadURL,
-      Destroy: destroy,
-      get Title() {
-        return title;
-      },
-      BIsLoadingURL: () => loading,
-      StartRequestCallbacks: {
-        Register: (fn: () => void) => {
-          started = fn;
-          return { Unregister: unregister };
+  it('syncs episode addresses and titles into history without reloading the playing video', async () => {
+    vi.useFakeTimers();
+    try {
+      const short = 'https://b23.tv/short';
+      const first = 'https://video.example/episode/1';
+      const second = 'https://video.example/episode/2';
+      const state = { ...createState(ViewMode.Sidebar), url: short };
+      const manager = new StateManager(state);
+      let actualUrl = first;
+      let title = '第一集';
+      let loading = true;
+      rememberUrl(localStorage, short);
+      getWebPageStateMock.mockImplementation(async () => ({ url: actualUrl, title }));
+      createBrowserView.mockReturnValue({
+        GetBrowser: () => ({ SetVisible: setVisible, SetBounds: setBounds }),
+        LoadURL: loadURL,
+        Destroy: destroy,
+        URL: first, // Steam keeps this old value after a client-side episode switch.
+        get Title() {
+          return title;
         },
-      },
-      FinishedRequestCallbacks: {
-        Register: (fn: () => void) => {
-          finished = fn;
-          return { Unregister: unregister };
-        },
-      },
-    });
-    vi.mocked(useGlobalState).mockReturnValue([state, vi.fn(), manager] as never);
-    const { rerender, unmount } = render(<PortalView />);
-    expect(historyLabel(localStorage, state.url)).toBe('未命名网页');
-    act(() => started());
-    title = '重定向后的中文标题';
-    loading = false;
-    act(() => finished());
-    expect(historyLabel(localStorage, state.url)).toBe(title);
-    expect(manager.get()).toMatchObject({ pageTitle: title, pageTitleUrl: state.url });
-    const next = { ...state, url: 'https://second.example/' };
-    rememberUrl(localStorage, next.url);
-    manager.set(next);
-    vi.mocked(useGlobalState).mockReturnValue([next, vi.fn(), manager] as never);
-    rerender(<PortalView />);
-    expect(historyLabel(localStorage, next.url)).toBe('未命名网页');
-    title = '第二页标题';
-    act(() => finished());
-    expect(historyLabel(localStorage, next.url)).toBe('第二页标题');
-    unmount();
-    expect(unregister).toHaveBeenCalledTimes(4);
+        BIsLoadingURL: () => loading,
+      });
+      const refresh = () =>
+        vi.mocked(useGlobalState).mockReturnValue([manager.get(), vi.fn(), manager] as never);
+      refresh();
+      const { rerender, unmount } = render(<PortalView />);
+      await act(async () => {
+        vi.advanceTimersByTime(250);
+      });
+      expect(getWebPageStateMock).not.toHaveBeenCalled();
+      loading = false;
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(manager.get()).toMatchObject({ url: first, pageTitle: '第一集', pageTitleUrl: first });
+      expect(getUrlHistory(localStorage)).toEqual([first]);
+      refresh();
+      rerender(<PortalView />);
+      expect(loadURL).toHaveBeenCalledExactlyOnceWith(short);
+
+      actualUrl = second;
+      title = '第二集';
+      await act(async () => {
+        vi.advanceTimersByTime(250);
+      });
+      expect(getWebPageStateMock).toHaveBeenLastCalledWith(first, '第二集');
+      expect(manager.get()).toMatchObject({
+        url: second,
+        pageTitle: '第二集',
+        pageTitleUrl: second,
+      });
+      expect(getUrlHistory(localStorage)).toEqual([second, first]);
+      expect(historyLabel(localStorage, first)).toBe('第一集');
+      expect(historyLabel(localStorage, second)).toBe('第二集');
+      refresh();
+      rerender(<PortalView />);
+      expect(loadURL).toHaveBeenCalledTimes(1);
+
+      actualUrl = first;
+      title = '第一集';
+      await act(async () => {
+        vi.advanceTimersByTime(250);
+      });
+      expect(getUrlHistory(localStorage)).toEqual([first, second]);
+      refresh();
+      rerender(<PortalView />);
+      title = '第一集 · 更新标题';
+      await act(async () => {
+        vi.advanceTimersByTime(250);
+      });
+      expect(historyLabel(localStorage, first)).toBe(title);
+      expect(getUrlHistory(localStorage)).toEqual([first, second]);
+      expect(loadURL).toHaveBeenCalledTimes(1);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignores a late page snapshot after the user opens another address', async () => {
+    vi.useFakeTimers();
+    try {
+      const state = createState(ViewMode.Sidebar);
+      const manager = new StateManager(state);
+      let finish!: (page: { url: string; title: string }) => void;
+      getWebPageStateMock.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      vi.mocked(useGlobalState).mockReturnValue([state, vi.fn(), manager] as never);
+      const { rerender, unmount } = render(<PortalView />);
+      await act(async () => {
+        vi.advanceTimersByTime(250);
+      });
+      const next = { ...state, url: 'https://second.example/' };
+      manager.set(next);
+      vi.mocked(useGlobalState).mockReturnValue([next, vi.fn(), manager] as never);
+      rerender(<PortalView />);
+      await act(async () => finish({ url: 'https://old.example/', title: '过期标题' }));
+      expect(manager.get()).toEqual(next);
+      expect(getUrlHistory(localStorage)).not.toContain('https://old.example/');
+      expect(loadURL).toHaveBeenLastCalledWith(next.url);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

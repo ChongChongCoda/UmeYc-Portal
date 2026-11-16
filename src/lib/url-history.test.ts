@@ -9,11 +9,11 @@ import {
 } from './url-history';
 import { toLocalFileUrl } from './local-files';
 
-describe('five-item browsing history', () => {
-  it('keeps only the five most recent addresses, newest first', () => {
-    for (let i = 0; i < 7; i++) rememberUrl(localStorage, `https://example.com/${i}`);
+describe('twenty-item browsing history', () => {
+  it('keeps only the twenty most recent addresses, newest first', () => {
+    for (let i = 0; i < 23; i++) rememberUrl(localStorage, `https://example.com/${i}`);
     expect(getUrlHistory(localStorage)).toEqual(
-      [6, 5, 4, 3, 2].map((i) => `https://example.com/${i}`),
+      Array.from({ length: 20 }, (_, i) => 22 - i).map((i) => `https://example.com/${i}`),
     );
   });
 
@@ -21,6 +21,29 @@ describe('five-item browsing history', () => {
     for (const url of ['https://a.example/', 'https://b.example/', 'https://a.example/'])
       rememberUrl(localStorage, url);
     expect(getUrlHistory(localStorage)).toEqual(['https://a.example/', 'https://b.example/']);
+  });
+
+  it('deduplicates Bilibili tracking URLs while preserving different videos and parts', () => {
+    rememberUrl(localStorage, 'https://www.bilibili.com/video/BV123/?share=first&p=1');
+    rememberPageTitle(localStorage, 'https://www.bilibili.com/video/BV123/?p=1', '第一集');
+    rememberUrl(localStorage, 'https://www.bilibili.com/video/BV456/?trackid=next');
+    rememberUrl(localStorage, 'https://www.bilibili.com/video/BV123?trackid=return');
+    expect(getUrlHistory(localStorage)).toEqual([
+      'https://www.bilibili.com/video/BV123/',
+      'https://www.bilibili.com/video/BV456/',
+    ]);
+    expect(historyLabel(localStorage, 'https://www.bilibili.com/video/BV123?p=1')).toBe('第一集');
+    rememberUrl(localStorage, 'https://www.bilibili.com/video/BV123/?p=2');
+    expect(getUrlHistory(localStorage)[0]).toBe('https://www.bilibili.com/video/BV123/?p=2');
+  });
+
+  it('migrates existing tracked Bilibili titles and duplicate URLs', () => {
+    const first = 'https://www.bilibili.com/video/BV123/?p=1&share=first';
+    const second = 'https://www.bilibili.com/video/BV123/?share=second';
+    localStorage.setItem(URL_HISTORY_KEY, JSON.stringify([first, second]));
+    localStorage.setItem(URL_HISTORY_TITLES_KEY, JSON.stringify({ [first]: '标题' }));
+    expect(getUrlHistory(localStorage)).toEqual(['https://www.bilibili.com/video/BV123/']);
+    expect(historyLabel(localStorage, second)).toBe('标题');
   });
 
   it('remembers local images and canonicalizes encoded versus plain paths', () => {
@@ -80,7 +103,7 @@ describe('five-item browsing history', () => {
     rememberPageTitle(localStorage, 'https://old.example/', '旧记录标题');
     rememberUrl(localStorage, 'https://old.example/');
     expect(historyLabel(localStorage, 'https://old.example/')).toBe('旧记录标题');
-    for (let i = 0; i < 5; i++) rememberUrl(localStorage, `https://example.com/${i}`);
+    for (let i = 0; i < 20; i++) rememberUrl(localStorage, `https://example.com/${i}`);
     expect(localStorage.getItem(URL_HISTORY_TITLES_KEY)).not.toContain('旧记录标题');
     rememberPageTitle(localStorage, 'https://old.example/', '迟到的标题');
     expect(localStorage.getItem(URL_HISTORY_TITLES_KEY)).not.toContain('迟到');

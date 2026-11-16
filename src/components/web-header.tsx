@@ -4,19 +4,21 @@ import icons from '../../assets/zoom-icons.json';
 
 export const WEB_HEADER_HEIGHT = 34;
 export type ZoomAction = 'smaller' | 'default' | 'larger';
-const zoomWebPage = callable<[url: string, action: ZoomAction], { factor: number }>(
+const zoomWebPage = callable<[url: string, action: ZoomAction, title: string], { factor: number }>(
   'zoom_web_page',
 );
 
 export const WebHeader = ({
   title,
   getUrl,
+  getTitle,
   x,
   y,
   width,
 }: {
   title: string;
   getUrl: () => string;
+  getTitle?: () => string;
   x: number;
   y: number;
   width: number;
@@ -26,7 +28,7 @@ export const WebHeader = ({
     if (pending) return;
     setPending(true);
     try {
-      await zoomWebPage(getUrl(), action);
+      await zoomWebPage(getUrl(), action, getTitle ? getTitle() : title);
     } catch (error) {
       toaster.toast({ title: '网页缩放失败', body: String(error) });
     } finally {
