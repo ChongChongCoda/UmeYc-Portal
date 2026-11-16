@@ -1,10 +1,10 @@
-# Portal 悬浮浏览器 · 简体中文版
+# UmeYc-Portal
 
 在 Steam Deck 游戏模式中打开网页、阅读本地攻略长图，支持随侧栏显示、右摇杆滚动，以及扫码填写网址。
 
 [English / 上游说明](README.en.md) · [实机验证记录](docs/LOCAL_FILES_VERIFICATION.md)
 
-![Steam Deck 游戏模式中的 Portal 设置实机截图：中文文件名、浏览历史及二维码入口](docs/images/portal-sidebar.png)
+![Steam Deck 游戏模式实机截图：左侧本地攻略与右侧 UmeYc-Portal 设置同时显示](docs/images/portal-sidebar.png)
 
 ## 功能
 
@@ -19,11 +19,11 @@
 - **中文文件名**：本地文件在网址栏和历史中显示原始中文名称，编辑时显示可读路径。
 - **随侧栏播放/暂停**：网页侧栏模式可选自动发送空格，展开后继续、收起前暂停；默认关闭。
 
-当前版本：`1.0.0-zh-cn.10`。基于官方稳定标签 `v0.1.1`，保留上游提交历史和 BSD-3-Clause 许可证。
+当前版本：`1.0.0-zh-cn.11`。基于官方稳定标签 `v0.1.1`，保留上游提交历史和 BSD-3-Clause 许可证。
 
 ## 使用
 
-按 Steam Deck 的「…」键，进入 **Decky → Portal 悬浮浏览器**。
+按 Steam Deck 的「…」键，进入 **Decky → UmeYc-Portal**。
 
 ### 本地攻略
 
@@ -56,11 +56,11 @@
 
 需要先安装 [Decky Loader](https://decky.xyz/)。
 
-1. 下载或自行构建 `Portal.zip`，复制到 Deck。
+1. 下载或自行构建 `UmeYc-Portal.zip`，复制到 Deck。
 2. 打开 Decky 设置，选择「从 ZIP 文件安装插件」。
 3. 选择 ZIP 并确认安装，随后在 Decky 中打开 Portal。
 
-内部插件名称仍为 `Portal`，升级会保留原有位置、大小和网址设置。其他插件不受影响。以后安装官方版更新会覆盖本分支的改动。
+插件名称为 `UmeYc-Portal`。从旧版 `Portal` 迁移时，先卸载旧插件再安装本版；原有网址、位置、大小和历史使用相同的存储键保留。
 
 ## 从源码构建
 
@@ -77,7 +77,7 @@ pnpm build
 python3 scripts/package.py
 ```
 
-安装包位于 `out/Portal.zip`，包含前端、Python 后端和图片/扫码页面资源。请安装完整 ZIP，不要只替换 `dist`。
+安装包位于 `out/UmeYc-Portal.zip`，包含前端、Python 后端和图片/扫码页面资源。请安装完整 ZIP，不要只替换 `dist`。
 
 ## 运行方式与限制
 

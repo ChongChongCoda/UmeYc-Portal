@@ -49,8 +49,8 @@ export default definePlugin(() => {
   });
 
   return {
-    name: 'Portal',
-    titleView: <div className={quickAccessMenuClasses.Title}>Portal 悬浮浏览器</div>,
+    name: 'UmeYc-Portal',
+    titleView: <div className={quickAccessMenuClasses.Title}>UmeYc-Portal</div>,
     icon: <FaTv />,
     content: (
       <GlobalContext.Provider value={state}>

@@ -1,12 +1,12 @@
 > The default README is now Chinese. See [README.md](README.md) for this fork’s current features, QR URL input, installation and build instructions.
 
-# Portal
+# UmeYc-Portal
 
-**UmeYc-Portal fork:** Simplified Chinese UI, a game-mode local file picker, sidebar-linked reading layout, right-stick image scrolling, and session-only reading position memory. See [中文说明与构建步骤](README.zh-CN.md). Based on upstream stable v0.1.1; upstream attribution and BSD license are preserved. For this fork, build with `pnpm build && python3 scripts/package.py` and install `out/Portal.zip`.
+**UmeYc-Portal fork:** Simplified Chinese UI, a game-mode local file picker, sidebar-linked reading layout, right-stick image scrolling, and session-only reading position memory. See [中文说明与构建步骤](README.zh-CN.md). Based on upstream stable v0.1.1; upstream attribution and BSD license are preserved. For this fork, build with `pnpm build && python3 scripts/package.py` and install `out/UmeYc-Portal.zip`.
 
 Portal is a [Decky Loader](https://decky.xyz/) plugin that provides an in-game web portal for streaming, browsing, and media playback on Steam Deck.
 
-![Portal placeholder screenshot](https://upload.wikimedia.org/wikipedia/commons/6/65/No-Image-Placeholder.svg)
+![Local guide alongside UmeYc-Portal settings on Steam Deck](docs/images/portal-sidebar.png)
 
 ## Background
 
@@ -24,17 +24,17 @@ Portal must be sideloaded manually. You can install a pre-built release or build
 
 1. Switch to **Desktop Mode** on your Steam Deck.
 2. Open a web browser and go to this fork's [releases](https://github.com/xiaochaom/UmeYc-Portal/releases), or build the ZIP using the Chinese instructions above.
-3. Download **Portal.zip** and note where it was saved (usually `~/Downloads`).
+3. Download **UmeYc-Portal.zip** and note where it was saved (usually `~/Downloads`).
 4. Switch back to **Gaming Mode**.
 5. Open the **Quick Access Menu** (... button) and go to the **Decky** tab.
 6. Tap the **settings icon** (gear) at the top, then choose **Install Plugin from ZIP File**.
-7. Browse to the downloaded `Portal.zip` and select it.
-8. Decky will install the plugin automatically. Portal should now appear in the Decky menu.
+7. Browse to the downloaded `UmeYc-Portal.zip` and select it.
+8. Decky will install the plugin automatically. UmeYc-Portal should now appear in the Decky menu.
 
 ### Option 2 — Download on PC and Copy to Steam Deck
 
-1. Download **Portal.zip** from this fork's [releases](https://github.com/xiaochaom/UmeYc-Portal/releases), or build the ZIP using the Chinese instructions above.
-2. Copy `Portal.zip` to your Steam Deck using any of these methods:
+1. Download **UmeYc-Portal.zip** from this fork's [releases](https://github.com/xiaochaom/UmeYc-Portal/releases), or build the ZIP using the Chinese instructions above.
+2. Copy `UmeYc-Portal.zip` to your Steam Deck using any of these methods:
    - **USB drive** — Copy to a USB drive, plug it into your Deck.
    - **KDE Connect** — Pair your PC and Deck on the same network and send the file.
    - **SMB / network share** — Access a shared folder from Dolphin on your Deck.
@@ -42,8 +42,8 @@ Portal must be sideloaded manually. You can install a pre-built release or build
 3. Switch to **Gaming Mode** on your Steam Deck.
 4. Open the **Quick Access Menu** (... button) and go to the **Decky** tab.
 5. Tap the **settings icon** (gear) at the top, then choose **Install Plugin from ZIP File**.
-6. Browse to where you copied `Portal.zip` and select it.
-7. Decky will install the plugin automatically. Portal should now appear in the Decky menu.
+6. Browse to where you copied `UmeYc-Portal.zip` and select it.
+7. Decky will install the plugin automatically. UmeYc-Portal should now appear in the Decky menu.
 
 ### Option 3 — Build from Source
 
@@ -67,7 +67,7 @@ Portal must be sideloaded manually. You can install a pre-built release or build
    pnpm deck:builddeploy    # build + deploy in one step
    ```
 
-   **Manual deploy** — copy `out/Portal.zip` to your Deck and follow the same steps from Option 1 above.
+   **Manual deploy** — copy `out/UmeYc-Portal.zip` to your Deck and follow the same steps from Option 1 above.
 
 #### Configuring deck.json
 

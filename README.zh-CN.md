@@ -1,4 +1,4 @@
-# Portal 中文说明
+# UmeYc-Portal 中文说明
 
 中文说明现已作为项目默认首页展示，请阅读 **[README.md](README.md)**。
 

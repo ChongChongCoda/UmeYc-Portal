@@ -25,17 +25,5 @@ docker run --rm \
   ghcr.io/steamdeckhomebrew/builder:latest \
   sh -c "pnpm install && pnpm build"
 
-# Package into a zip matching the structure the Decky CLI produces:
-#   PluginName/dist/index.js, package.json, plugin.json, LICENSE
-TMP_DIR=$(mktemp -d)
-mkdir -p "${OUT_DIR}" "${TMP_DIR}/${PLUGIN_NAME}"
-cp plugin.json package.json "${TMP_DIR}/${PLUGIN_NAME}/"
-cp -r dist "${TMP_DIR}/${PLUGIN_NAME}/"
-cp main.py "${TMP_DIR}/${PLUGIN_NAME}/"
-cp -r assets "${TMP_DIR}/${PLUGIN_NAME}/"
-[ -f README.zh-CN.md ] && cp README.zh-CN.md "${TMP_DIR}/${PLUGIN_NAME}/"
-[ -f LICENSE ] && cp LICENSE "${TMP_DIR}/${PLUGIN_NAME}/"
-(cd "${TMP_DIR}" && zip -r "${OUT_DIR}/${PLUGIN_NAME}.zip" "${PLUGIN_NAME}")
-rm -rf "${TMP_DIR}"
-
-echo "Built ${OUT_DIR}/${PLUGIN_NAME}.zip"
+# Use the shared packager so Python helpers and viewer assets ship together.
+python3 scripts/package.py
