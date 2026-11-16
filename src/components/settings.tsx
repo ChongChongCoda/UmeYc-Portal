@@ -122,6 +122,7 @@ export const Settings = () => {
             onClick={() =>
               setGlobalState((state) => ({
                 ...state,
+                activePanel: undefined,
                 viewMode: state.viewMode === ViewMode.Closed ? ViewMode.Sidebar : ViewMode.Closed,
               }))
             }

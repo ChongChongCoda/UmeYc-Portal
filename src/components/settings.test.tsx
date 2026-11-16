@@ -176,7 +176,32 @@ describe('Settings', () => {
 
     fireEvent.click(screen.getByText('关闭'));
     expect(state.viewMode).toBe(ViewMode.Closed);
+    expect((state as typeof state & { activePanel?: string }).activePanel).toBeUndefined();
   });
+
+  it.each(['url', 'phone', 'files'] as const)(
+    'closes the active %s panel together with the reader and reopens only the current page',
+    (activePanel) => {
+      let state = {
+        ...createState(ViewMode.Sidebar),
+        activePanel: activePanel as string | undefined,
+      };
+      const setState = (updater: (s: typeof state) => typeof state) => {
+        state = updater(state);
+      };
+      vi.mocked(useGlobalState).mockReturnValue([state, setState, {}] as never);
+      const { rerender } = render(<Settings />);
+      fireEvent.click(screen.getByText('关闭'));
+      expect(state.viewMode).toBe(ViewMode.Closed);
+      expect(state.activePanel).toBeUndefined();
+      expect(state.url).toBe('https://netflix.com');
+      vi.mocked(useGlobalState).mockReturnValue([state, setState, {}] as never);
+      rerender(<Settings />);
+      fireEvent.click(screen.getByText('打开'));
+      expect(state.viewMode).toBe(ViewMode.Sidebar);
+      expect(state.activePanel).toBeUndefined();
+    },
+  );
 
   it('keeps the webpage title as the unified entry and QR on its own row', () => {
     const state = {
