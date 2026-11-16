@@ -51,7 +51,7 @@ export const Settings = () => {
       setGlobalState((state) => ({
         ...state,
         url: toLocalFileUrl(path),
-        viewMode: ViewMode.Picture,
+        viewMode: state.viewMode === ViewMode.Closed ? ViewMode.Sidebar : state.viewMode,
         visible: true,
       }));
     } catch (error) {
@@ -127,6 +127,31 @@ export const Settings = () => {
                 </div>
               </ButtonItem>
             </PanelSectionRow>
+            <PanelSectionRow>
+              <DropdownItem
+                label="布局"
+                selectedOption={isMinimised ? ViewMode.Picture : viewMode}
+                rgOptions={[
+                  { label: '悬浮小窗', data: ViewMode.Picture },
+                  { label: '全屏', data: ViewMode.Expand },
+                  { label: '随侧栏显示', data: ViewMode.Sidebar },
+                ]}
+                onChange={(option) =>
+                  setGlobalState((state) => ({
+                    ...state,
+                    viewMode: option.data,
+                    visible: true,
+                  }))
+                }
+              />
+            </PanelSectionRow>
+            {viewMode === ViewMode.Sidebar && (
+              <PanelSectionRow>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>
+                  按「…」显示或隐藏攻略；右摇杆滚动，自动记住本次阅读位置。
+                </div>
+              </PanelSectionRow>
+            )}
             <PanelSectionRow>
               <ToggleField
                 label="展开"

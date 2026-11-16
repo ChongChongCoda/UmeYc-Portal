@@ -16,4 +16,7 @@ export const toaster = {
 export const openFilePicker = vi.fn();
 export const FileSelectionType = { FILE: 0, FOLDER: 1 };
 export const prepareLocalFileMock = vi.fn();
-export const callable = vi.fn(() => prepareLocalFileMock);
+export const setReaderMotionMock = vi.fn(async () => undefined);
+export const callable = vi.fn((route: string) =>
+  route === 'set_reader_motion' ? setReaderMotionMock : prepareLocalFileMock,
+);

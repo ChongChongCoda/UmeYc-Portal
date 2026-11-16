@@ -1,4 +1,4 @@
-import { Router, WindowRouter, getGamepadNavigationTrees } from '@decky/ui';
+import { Router, WindowRouter, getGamepadNavigationTrees, quickAccessMenuClasses } from '@decky/ui';
 import { useEffect, useState } from 'react';
 import { toaster } from '@decky/api';
 
@@ -8,6 +8,8 @@ import { UIComposition, useUIComposition } from '../hooks/use-ui-composition';
 import { BAR_WIDTH, ControlBar } from './control-bar';
 import { MinimisedIndicator } from './minimised-indicator';
 import { localPathFromUrl, prepareLocalFile } from '../lib/local-files';
+import { getOpenSideMenu, isVirtualKeyboardShowing } from '../lib/menu-state';
+import { ReaderInput } from './reader-input';
 import {
   PICTURE_HEIGHT,
   PICTURE_WIDTH,
@@ -24,6 +26,7 @@ interface BrowserProps {
   y: number;
   width: number;
   height: number;
+  preserveHiddenBounds?: boolean;
 }
 
 interface BrowserHandle {
@@ -43,6 +46,8 @@ interface MainWindowInstance {
 
 interface NavTree {
   id?: string;
+  m_ID?: string;
+  Root?: { Element?: { ownerDocument?: { defaultView?: DeckWindow | null } } };
   m_Root?: {
     m_element?: {
       ownerDocument?: {
@@ -55,6 +60,10 @@ interface NavTree {
 interface DeckWindow {
   document: {
     hidden: boolean;
+    querySelector?: (selector: string) => { getBoundingClientRect(): { width: number } } | null;
+    querySelectorAll?: (
+      selector: string,
+    ) => ArrayLike<{ getBoundingClientRect(): { width: number } }>;
   };
   screenLeft?: number;
   screenTop?: number;
@@ -62,7 +71,7 @@ interface DeckWindow {
   outerHeight?: number;
 }
 
-const Browser = ({ url, visible, x, y, width, height }: BrowserProps) => {
+const Browser = ({ url, visible, x, y, width, height, preserveHiddenBounds }: BrowserProps) => {
   useUIComposition(UIComposition.Notification);
 
   const [handles] = useState<{ browser: BrowserHandle; view: BrowserViewHandle } | null>(() => {
@@ -114,8 +123,9 @@ const Browser = ({ url, visible, x, y, width, height }: BrowserProps) => {
   }, [url, handles]);
 
   useEffect(() => {
+    if (preserveHiddenBounds && !visible) return;
     handles?.browser.SetBounds(x, y, width, height);
-  }, [handles, x, y, width, height]);
+  }, [handles, x, y, width, height, preserveHiddenBounds, visible]);
 
   useEffect(() => {
     return () => handles?.view.Destroy();
@@ -134,24 +144,49 @@ const getBounds = (windowView?: DeckWindow | null) => {
 };
 
 const getOwnerWindow = (trees: NavTree[], id: string) => {
+  const tree = trees.find((tree) => (tree.id ?? tree.m_ID) === id);
   return (
-    trees.find((tree) => tree.id === id)?.m_Root?.m_element?.ownerDocument?.defaultView ?? null
+    tree?.Root?.Element?.ownerDocument?.defaultView ??
+    tree?.m_Root?.m_element?.ownerDocument?.defaultView ??
+    null
   );
 };
 
+const getQuickAccessBounds = (windowView: DeckWindow | null) => {
+  const bounds = getBounds(windowView);
+  const doc = windowView?.document;
+  const tabs = doc?.querySelector?.(`[class~="${quickAccessMenuClasses.Tabs}"]`);
+  const panels = doc?.querySelectorAll?.(`[class~="${quickAccessMenuClasses.TabGroupPanel}"]`);
+  const panelWidth = Math.max(
+    0,
+    ...Array.from(panels ?? []).map((p) => p.getBoundingClientRect().width),
+  );
+  const contentWidth = (tabs?.getBoundingClientRect().width ?? 0) + panelWidth;
+  // CEF popup outerWidth may describe its full-screen transparent backing surface.
+  if (contentWidth > 0) bounds.width = contentWidth;
+  if (bounds.width <= 0 || bounds.width >= SCREEN_WIDTH) bounds.width = 348;
+  return bounds;
+};
+
 const getDeckComponentBounds = () => {
-  const trees = getGamepadNavigationTrees() as NavTree[];
+  const trees = (getGamepadNavigationTrees() ?? []) as NavTree[];
 
   const nav = getOwnerWindow(trees, 'MainNavMenuContainer');
-  const navHidden = nav?.document.hidden ?? true;
+  const openSideMenu = getOpenSideMenu();
+  const navHidden =
+    openSideMenu === undefined ? (nav?.document.hidden ?? true) : openSideMenu !== 1;
   const navBounds = navHidden ? null : getBounds(nav);
 
   const qam = getOwnerWindow(trees, 'QuickAccess-NA');
-  const qamHidden = qam?.document.hidden ?? true;
-  const qamBounds = qamHidden ? null : getBounds(qam);
+  const qamHidden =
+    openSideMenu === undefined ? (qam?.document.hidden ?? true) : openSideMenu !== 2;
+  const qamBounds = qamHidden ? null : getQuickAccessBounds(qam);
 
   const virtualKeyboard = getOwnerWindow(trees, 'virtual keyboard');
-  const virtualKeyboardHidden = !virtualKeyboard;
+  const virtualKeyboardHidden = !(
+    isVirtualKeyboardShowing() ??
+    (virtualKeyboard && !virtualKeyboard.document.hidden)
+  );
   // this is a guess, gotta figure out how to inspect to keyboard DOM
   const virtualKeyboardBounds = virtualKeyboardHidden
     ? null
@@ -166,6 +201,7 @@ const getDeckComponentBounds = () => {
     nav: navBounds,
     qam: qamBounds,
     virtualKeyboard: virtualKeyboardBounds,
+    qamOpen: !qamHidden,
   };
 };
 
@@ -196,7 +232,8 @@ const areDeckComponentBoundsEqual = (
   return (
     areRectanglesEqual(first.nav, second.nav) &&
     areRectanglesEqual(first.qam, second.qam) &&
-    areRectanglesEqual(first.virtualKeyboard, second.virtualKeyboard)
+    areRectanglesEqual(first.virtualKeyboard, second.virtualKeyboard) &&
+    first.qamOpen === second.qamOpen
   );
 };
 
@@ -209,7 +246,7 @@ const useDeckComponentBounds = () => {
         const next = getDeckComponentBounds();
         return areDeckComponentBoundsEqual(next, current) ? current : next;
       });
-    }, 250);
+    }, 100);
 
     return () => clearInterval(interval);
   }, []);
@@ -218,8 +255,17 @@ const useDeckComponentBounds = () => {
 };
 
 export const PortalView = () => {
-  const { nav, qam, virtualKeyboard } = useDeckComponentBounds();
+  const { nav, qam, virtualKeyboard, qamOpen } = useDeckComponentBounds();
   const [{ viewMode, position, size, url, visible, ...settings }] = useGlobalState();
+  const isSidebar = viewMode === ViewMode.Sidebar;
+  const readerVisible = visible && (!isSidebar || qamOpen);
+  const localPath = (() => {
+    try {
+      return localPathFromUrl(url);
+    } catch {
+      return null;
+    }
+  })();
 
   const pictureWidth = PICTURE_WIDTH * size;
   const pictureHeight = PICTURE_HEIGHT * size;
@@ -267,7 +313,7 @@ export const PortalView = () => {
     height: SCREEN_HEIGHT,
   };
 
-  const margin = viewMode === ViewMode.Expand ? 30 : settings.margin;
+  const margin = isSidebar ? 0 : viewMode === ViewMode.Expand ? 30 : settings.margin;
 
   bounds.x += margin;
   bounds.y += margin;
@@ -275,6 +321,9 @@ export const PortalView = () => {
   bounds.height -= margin * 2;
 
   switch (viewMode) {
+    case ViewMode.Sidebar:
+      // The browser keeps its last bounds while hidden, preserving the scroll offset.
+      break;
     case ViewMode.Expand:
       {
         // do nothing, screen is calculated initially to fullscreen
@@ -343,7 +392,7 @@ export const PortalView = () => {
       break;
   }
 
-  const showControlBar = settings.controlBar;
+  const showControlBar = settings.controlBar && !isSidebar;
 
   const barOnLeft =
     viewMode === ViewMode.Picture &&
@@ -364,13 +413,15 @@ export const PortalView = () => {
     <>
       <Browser
         url={url}
-        visible={visible}
+        visible={readerVisible}
         x={browserX}
         y={bounds.y}
         width={browserWidth}
         height={bounds.height}
+        preserveHiddenBounds={isSidebar}
       />
-      {visible && showControlBar && (
+      {readerVisible && localPath && <ReaderInput path={localPath} />}
+      {readerVisible && showControlBar && (
         <ControlBar
           x={barX}
           y={bounds.y}

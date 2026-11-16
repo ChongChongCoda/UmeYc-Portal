@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -78,6 +79,48 @@ class LocalPreviewTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(first, second)
         with urlopen(second) as response:
             self.assertEqual(response.read().decode(), '攻略正文')
+
+    async def test_reading_position_is_session_only_and_scoped_to_file(self):
+        url = (await self.plugin.prepare_local_file(str(self.path)))["url"]
+        state_url = url.replace('/viewer/', '/state/')
+        state = {"top": 1.25, "left": 0.2, "zoom": 1.4}
+        request = Request(state_url, data=json.dumps(state).encode(), method='POST')
+        with urlopen(request) as response:
+            self.assertEqual(response.status, 204)
+        with urlopen(url) as response:
+            page = response.read().decode()
+            self.assertIn('&quot;top&quot;: 1.25', page)
+        same_url = (await self.plugin.prepare_local_file(str(self.path)))["url"]
+        self.assertEqual(url, same_url)
+        await self.plugin._unload()
+        restarted = (await self.plugin.prepare_local_file(str(self.path)))["url"]
+        with urlopen(restarted) as response:
+            self.assertIn('&quot;top&quot;: 0', response.read().decode())
+
+    async def test_motion_is_pushed_to_subscribers_and_stops_on_unload(self):
+        import queue
+        url = (await self.plugin.prepare_local_file(str(self.path)))["url"]
+        token = url.rsplit('/', 1)[1]
+        listener = queue.Queue(maxsize=4)
+        self.plugin._server.listeners[token] = [listener]
+        await self.plugin.set_reader_motion(str(self.path), 0, 0.8)
+        self.assertEqual(json.loads(listener.get_nowait()), {"x": 0, "y": 0.8})
+        with self.assertRaises(ValueError):
+            await self.plugin.set_reader_motion(str(self.path), 0, float('nan'))
+        with self.assertRaises(ValueError):
+            await self.plugin.set_reader_motion('/unselected.JPG', 0, 1)
+        await self.plugin._unload()
+        self.assertIsNone(listener.get_nowait())
+
+    async def test_viewer_script_is_served_and_state_rejects_invalid_values(self):
+        url = (await self.plugin.prepare_local_file(str(self.path)))["url"]
+        with urlopen(url.replace('/viewer/', '/script/')) as response:
+            self.assertEqual(response.headers['Content-Type'], 'text/javascript; charset=utf-8')
+            self.assertIn(b'EventSource', response.read())
+        for state in [{}, {"top": -1, "left": 0, "zoom": 1}, {"top": 0, "left": 0, "zoom": 100}]:
+            with self.subTest(state=state), self.assertRaises(HTTPError) as caught:
+                urlopen(Request(url.replace('/viewer/', '/state/'), data=json.dumps(state).encode()))
+            self.assertEqual(caught.exception.code, 400)
 
 
 if __name__ == '__main__':

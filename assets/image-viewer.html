@@ -20,17 +20,6 @@
   <button id="fit" aria-label="适合宽度">适宽</button>
   <button id="larger" aria-label="放大">＋</button>
 </header>
-<main><img id="guide" src="{{IMAGE_URL}}" alt="{{TITLE}}"><p id="error">图片无法读取，请检查 SD 卡后重新选择文件。</p></main>
-<script>
-  const image = document.getElementById('guide');
-  let scale = 1;
-  function zoom(value) {
-    scale = Math.min(8, Math.max(0.25, value));
-    image.style.width = (scale * 100) + '%';
-  }
-  document.getElementById('smaller').onclick = () => zoom(scale / 1.4);
-  document.getElementById('larger').onclick = () => zoom(scale * 1.4);
-  document.getElementById('fit').onclick = () => zoom(1);
-  image.onerror = () => { image.hidden = true; document.getElementById('error').style.display = 'block'; };
-</script>
+<main data-token="{{TOKEN}}" data-state="{{STATE}}"><img id="guide" src="/file/{{TOKEN}}" alt="{{TITLE}}"><p id="error">图片无法读取，请检查 SD 卡后重新选择文件。</p></main>
+<script src="/script/{{TOKEN}}"></script>
 </html>

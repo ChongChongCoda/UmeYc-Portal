@@ -137,6 +137,23 @@ describe('Settings', () => {
     localStorage.clear();
   });
 
+  it('switches to the sidebar reading layout', () => {
+    let state = createState(ViewMode.Picture);
+    vi.mocked(useGlobalState).mockReturnValue([
+      state,
+      (updater: (s: typeof state) => typeof state) => {
+        state = updater(state);
+      },
+      {},
+    ] as never);
+    render(<Settings />);
+    fireEvent.change(screen.getByLabelText('布局'), {
+      target: { value: String(ViewMode.Sidebar) },
+    });
+    expect(state.viewMode).toBe(ViewMode.Sidebar);
+    expect(state.visible).toBe(true);
+  });
+
   it('opens an SD-card image and remembers its directory', async () => {
     let state = createState(ViewMode.Picture);
     const setGlobalState = vi.fn((updater: (s: typeof state) => typeof state) => {

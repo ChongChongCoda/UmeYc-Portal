@@ -8,6 +8,7 @@ export enum ViewMode {
   Picture = 2,
   Closed = 3,
   Minimised = 4,
+  Sidebar = 5,
 }
 
 export enum Position {

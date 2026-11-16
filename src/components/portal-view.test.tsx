@@ -3,6 +3,13 @@ import { act, render, waitFor } from '@testing-library/react';
 import { Router } from '@decky/ui';
 import { prepareLocalFileMock } from '../__mocks__/decky-api';
 import { toLocalFileUrl } from '../lib/local-files';
+import { getOpenSideMenu, isVirtualKeyboardShowing } from '../lib/menu-state';
+
+vi.mock('../lib/menu-state', () => ({
+  getOpenSideMenu: vi.fn(),
+  isVirtualKeyboardShowing: vi.fn(),
+}));
+vi.mock('./reader-input', () => ({ ReaderInput: () => <div data-testid="reader-input" /> }));
 
 import { PortalView, PortalViewOuter } from './portal-view';
 import { useGlobalState } from '../hooks/global-state';
@@ -34,6 +41,7 @@ vi.mock('../hooks/use-ui-composition', () => ({
 }));
 
 vi.mock('@decky/ui', () => ({
+  quickAccessMenuClasses: { Tabs: 'tabs', TabGroupPanel: 'panel' },
   Router: {
     WindowStore: {
       GamepadUIMainWindowInstance: {
@@ -64,6 +72,8 @@ const createState = (viewMode: ViewMode, position = Position.TopRight, margin = 
 describe('PortalView and PortalViewOuter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getOpenSideMenu).mockReturnValue(undefined);
+    vi.mocked(isVirtualKeyboardShowing).mockReturnValue(undefined);
 
     createBrowserView.mockReturnValue({
       GetBrowser: () => ({
@@ -84,6 +94,108 @@ describe('PortalView and PortalViewOuter', () => {
 
     expect(container).toBeEmptyDOMElement();
     expect(createBrowserView).not.toHaveBeenCalled();
+  });
+
+  const qamTree = () => ({
+    id: 'QuickAccess-NA',
+    m_Root: {
+      m_element: {
+        ownerDocument: {
+          defaultView: {
+            document: { hidden: false },
+            screenLeft: 534,
+            screenTop: 0,
+            outerWidth: 320,
+            outerHeight: 534,
+          },
+        },
+      },
+    },
+  });
+
+  it('fills the area left of QAM and hides without resizing or destroying on close', () => {
+    vi.useFakeTimers();
+    try {
+      getGamepadNavigationTrees.mockReturnValue([qamTree()]);
+      vi.mocked(getOpenSideMenu).mockReturnValue(2);
+      vi.mocked(useGlobalState).mockReturnValue([
+        { ...createState(ViewMode.Sidebar), url: toLocalFileUrl('/tmp/guide.JPG') },
+      ] as never);
+      prepareLocalFileMock.mockResolvedValue({ url: 'http://127.0.0.1:1234/viewer/token' });
+      const { container } = render(<PortalView />);
+      expect(setBounds).toHaveBeenLastCalledWith(0, 0, 534, 534);
+      expect(setVisible).toHaveBeenLastCalledWith(true);
+      expect(container.querySelector('[data-testid="reader-input"]')).toBeTruthy();
+      vi.mocked(getOpenSideMenu).mockReturnValue(0);
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(setVisible).toHaveBeenLastCalledWith(false);
+      expect(setBounds).toHaveBeenLastCalledWith(0, 0, 534, 534);
+      expect(destroy).not.toHaveBeenCalled();
+      expect(container.querySelector('[data-testid="reader-input"]')).toBeNull();
+      vi.mocked(getOpenSideMenu).mockReturnValue(2);
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(setVisible).toHaveBeenLastCalledWith(true);
+      expect(createBrowserView).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('restores fullscreen width after QAM closes even when popup document stays visible', () => {
+    vi.useFakeTimers();
+    try {
+      getGamepadNavigationTrees.mockReturnValue([qamTree()]);
+      vi.mocked(getOpenSideMenu).mockReturnValue(2);
+      vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Expand)] as never);
+      render(<PortalView />);
+      expect(setBounds).toHaveBeenLastCalledWith(30, 30, 426, 474);
+      vi.mocked(getOpenSideMenu).mockReturnValue(0);
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(setBounds).toHaveBeenLastCalledWith(30, 30, 746, 474);
+      expect(setVisible).toHaveBeenLastCalledWith(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('measures the sidebar content rather than its full-screen transparent popup', () => {
+    const popup = {
+      document: {
+        hidden: false,
+        querySelector: () => ({ getBoundingClientRect: () => ({ width: 48 }) }),
+        querySelectorAll: () => [{ getBoundingClientRect: () => ({ width: 300 }) }],
+      },
+      outerWidth: 854,
+      outerHeight: 534,
+    };
+    getGamepadNavigationTrees.mockReturnValue([
+      { m_ID: 'QuickAccess-NA', Root: { Element: { ownerDocument: { defaultView: popup } } } },
+    ]);
+    vi.mocked(getOpenSideMenu).mockReturnValue(2);
+    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
+    render(<PortalView />);
+    expect(setBounds).toHaveBeenLastCalledWith(0, 0, 506, 534);
+  });
+
+  it('ignores a retained keyboard navigation tree after the keyboard is dismissed', () => {
+    getGamepadNavigationTrees.mockReturnValue([
+      qamTree(),
+      {
+        id: 'virtual keyboard',
+        m_Root: { m_element: { ownerDocument: { defaultView: { document: { hidden: false } } } } },
+      },
+    ]);
+    vi.mocked(getOpenSideMenu).mockReturnValue(2);
+    vi.mocked(isVirtualKeyboardShowing).mockReturnValue(false);
+    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
+    render(<PortalView />);
+    expect(setBounds).toHaveBeenLastCalledWith(0, 0, 534, 534);
   });
 
   it('resolves a fresh preview address for a persisted local file', async () => {
@@ -344,12 +456,12 @@ describe('PortalView and PortalViewOuter', () => {
       const initialCalls = setBounds.mock.calls.length;
 
       act(() => {
-        vi.advanceTimersByTime(250);
+        vi.advanceTimersByTime(100);
       });
       expect(setBounds).toHaveBeenCalledTimes(initialCalls);
 
       act(() => {
-        vi.advanceTimersByTime(250);
+        vi.advanceTimersByTime(100);
       });
       expect(setBounds.mock.calls.length).toBeGreaterThan(initialCalls);
     } finally {
