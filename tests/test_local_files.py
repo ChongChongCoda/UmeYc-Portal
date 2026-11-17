@@ -116,6 +116,27 @@ class LocalPreviewTests(unittest.IsolatedAsyncioTestCase):
         await self.plugin._unload()
         self.assertIsNone(listener.get_nowait())
 
+    async def test_zoom_commands_use_selected_image_and_validate_action(self):
+        import queue
+        with self.assertRaises(ValueError):
+            await self.plugin.zoom_reader(str(self.path), "smaller")
+        url = (await self.plugin.prepare_local_file(str(self.path)))["url"]
+        listener = queue.Queue(maxsize=4)
+        self.plugin._server.listeners[url.rsplit('/', 1)[1]] = [listener]
+        for action in ("smaller", "default", "larger"):
+            await self.plugin.zoom_reader(str(self.path), action)
+            self.assertEqual(json.loads(listener.get_nowait()), {"zoom": action})
+        with self.assertRaises(ValueError):
+            await self.plugin.zoom_reader(str(self.path), "invalid")
+        with self.assertRaises(ValueError):
+            await self.plugin.zoom_reader("/unselected.JPG", "default")
+        text = self.path.with_suffix('.txt')
+        text.write_text('攻略')
+        await self.plugin.prepare_local_file(str(text))
+        with self.assertRaises(ValueError):
+            await self.plugin.zoom_reader(str(text), "larger")
+        self.assertTrue(listener.empty())
+
     async def test_viewer_script_is_served_and_state_rejects_invalid_values(self):
         url = (await self.plugin.prepare_local_file(str(self.path)))["url"]
         with urlopen(url.replace('/viewer/', '/script/')) as response:

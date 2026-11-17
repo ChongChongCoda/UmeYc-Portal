@@ -52,7 +52,13 @@
 
   const events = new EventSource('/events/' + token);
   events.onmessage = (event) => {
-    motion = JSON.parse(event.data);
+    const message = JSON.parse(event.data);
+    if (message.zoom) {
+      const button = { smaller: 'smaller', default: 'fit', larger: 'larger' }[message.zoom];
+      if (button) document.getElementById(button).click();
+      return;
+    }
+    motion = message;
     expiresAt = performance.now() + 350;
     if (!animation && (motion.x || motion.y)) animation = requestAnimationFrame(frame);
   };

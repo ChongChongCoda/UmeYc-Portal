@@ -5,6 +5,8 @@ import {
   scrollWebPageMock,
   setReaderMotionMock,
   toggleWebFullscreenMock,
+  zoomReaderMock,
+  zoomWebPageMock,
 } from '../__mocks__/decky-api';
 import { getActiveControllerIndex } from '../lib/controller';
 
@@ -25,7 +27,12 @@ describe('right stick reader input', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     vi.mocked(getActiveControllerIndex).mockReturnValue(15);
-    useButtonsMock.mockReturnValue({ bRightStickClick: false });
+    useButtonsMock.mockReturnValue({
+      bRightStickClick: false,
+      bLeftBumper: false,
+      bRightBumper: false,
+      bLeftStickClick: false,
+    });
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -158,11 +165,74 @@ describe('right stick reader input', () => {
     unmount();
   });
 
-  it('does not subscribe to R3 when disabled or viewing local files', () => {
+  it('ignores R3 when disabled or viewing local files', async () => {
     const { rerender, unmount } = render(<ReaderInput />);
-    expect(useButtonsMock).not.toHaveBeenCalled();
+    useButtonsMock.mockReturnValue({ bRightStickClick: true });
+    await act(async () => rerender(<ReaderInput />));
+    expect(toggleWebFullscreenMock).not.toHaveBeenCalled();
+    useButtonsMock.mockReturnValue({ bRightStickClick: false });
     rerender(<ReaderInput path="/tmp/guide.JPG" fullscreen />);
-    expect(useButtonsMock).not.toHaveBeenCalled();
+    useButtonsMock.mockReturnValue({ bRightStickClick: true });
+    await act(async () => rerender(<ReaderInput path="/tmp/guide.JPG" fullscreen />));
+    expect(toggleWebFullscreenMock).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it.each([undefined, '/tmp/guide.JPG'])('maps L1/R1/L3 to zoom buttons for %s', async (path) => {
+    Object.assign(window, {
+      portal: {
+        URL: 'https://guide.example/',
+        Title: '攻略',
+        GetBrowser: () => ({ GetBounds: () => ({ width: 506, height: 534 }) }),
+      },
+    });
+    const { rerender, unmount } = render(<ReaderInput path={path} />);
+    for (const [button, action] of [
+      ['bLeftBumper', 'smaller'],
+      ['bRightBumper', 'larger'],
+      ['bLeftStickClick', 'default'],
+    ]) {
+      useButtonsMock.mockReturnValue({ [button]: true });
+      await act(async () => rerender(<ReaderInput path={path} />));
+      if (path) expect(zoomReaderMock).toHaveBeenLastCalledWith(path, action);
+      else
+        expect(zoomWebPageMock).toHaveBeenLastCalledWith('https://guide.example/', action, '攻略');
+      rerender(<ReaderInput path={path} />);
+      useButtonsMock.mockReturnValue({ [button]: false });
+      rerender(<ReaderInput path={path} />);
+    }
+    expect(path ? zoomReaderMock : zoomWebPageMock).toHaveBeenCalledTimes(3);
+    expect(path ? zoomWebPageMock : zoomReaderMock).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it('requires release after opening or changing controller, and ignores presses while pending', async () => {
+    useButtonsMock.mockReturnValue({ bLeftBumper: true });
+    const { rerender, unmount } = render(<ReaderInput path="/tmp/guide.JPG" />);
+    expect(zoomReaderMock).not.toHaveBeenCalled();
+    let finish!: () => void;
+    zoomReaderMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    useButtonsMock.mockReturnValue({ bLeftBumper: false });
+    rerender(<ReaderInput path="/tmp/guide.JPG" />);
+    useButtonsMock.mockReturnValue({ bLeftBumper: true });
+    rerender(<ReaderInput path="/tmp/guide.JPG" />);
+    useButtonsMock.mockReturnValue({ bLeftBumper: false });
+    rerender(<ReaderInput path="/tmp/guide.JPG" />);
+    useButtonsMock.mockReturnValue({ bLeftBumper: true });
+    rerender(<ReaderInput path="/tmp/guide.JPG" />);
+    expect(zoomReaderMock).toHaveBeenCalledTimes(1);
+    await act(async () => finish());
+    vi.mocked(getActiveControllerIndex).mockReturnValue(3);
+    await act(async () => {
+      vi.advanceTimersByTime(250);
+    });
+    expect(useButtonsMock).toHaveBeenLastCalledWith(3);
+    expect(zoomReaderMock).toHaveBeenCalledTimes(1);
     unmount();
   });
 });

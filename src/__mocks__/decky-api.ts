@@ -19,6 +19,7 @@ export const prepareLocalFileMock = vi.fn();
 export const listLocalFilesMock = vi.fn();
 export const deleteLocalFileMock = vi.fn();
 export const getUploadDirectoryMock = vi.fn(async () => ({ directory: '/run/media/deck/SD/攻略' }));
+export const zoomReaderMock = vi.fn(async (): Promise<void> => undefined);
 export const setReaderMotionMock = vi.fn(async () => undefined);
 export const scrollWebPageMock = vi.fn(async () => undefined);
 export const releaseWebScrollMock = vi.fn(async () => undefined);
@@ -31,6 +32,7 @@ export const getUrlInputStatusMock = vi.fn();
 export const cancelUrlInputMock = vi.fn(async () => undefined);
 export const callable = vi.fn((route: string) => {
   const methods: Record<string, unknown> = {
+    zoom_reader: zoomReaderMock,
     set_reader_motion: setReaderMotionMock,
     scroll_web_page: scrollWebPageMock,
     release_web_scroll: releaseWebScrollMock,

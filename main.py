@@ -58,7 +58,10 @@ class PreviewServer(ThreadingHTTPServer):
         return f"http://127.0.0.1:{self.server_port}/{route}/{token}"
 
     def motion(self, path, x, y):
-        payload = json.dumps({"x": x, "y": y})
+        self.broadcast(path, {"x": x, "y": y})
+
+    def broadcast(self, path, message):
+        payload = json.dumps(message)
         with self.grants_lock:
             tokens = [token for token, granted in self.grants.items() if granted == path]
             for token in tokens:
@@ -319,6 +322,17 @@ class Plugin:
 
     async def toggle_web_fullscreen(self, url: str, title: str = ""):
         await self._web_scroller.fullscreen(url, title)
+
+    async def zoom_reader(self, path: str, action: str):
+        if action not in ("smaller", "default", "larger"):
+            raise ValueError("Invalid zoom action")
+        selected = Path(path).resolve()
+        if self._server is None:
+            raise ValueError("Reader is not open")
+        with self._server.grants_lock:
+            if selected not in self._server.grants.values() or selected.suffix.lower() not in IMAGE_EXTENSIONS:
+                raise ValueError("Image has not been selected")
+        self._server.broadcast(selected, {"zoom": action})
 
     async def set_reader_motion(self, path: str, x: float, y: float):
         if self._server is None:

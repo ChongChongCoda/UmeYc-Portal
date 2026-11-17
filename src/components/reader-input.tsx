@@ -2,6 +2,7 @@ import { findModuleExport } from '@decky/ui';
 import { callable, toaster } from '@decky/api';
 import { useEffect, useRef, useState } from 'react';
 import { getActiveControllerIndex } from '../lib/controller';
+import type { ZoomAction } from './web-header';
 
 interface AxesState {
   RightJoystick?: { x: number; y: number };
@@ -12,35 +13,71 @@ const useAxesFeed: ((index: number) => AxesState | undefined) | undefined = find
   (value: unknown) =>
     typeof value === 'function' && value.toString().includes('useControllerAxesFeed'),
 );
-const useButtonFeed: ((index: number) => { bRightStickClick?: boolean } | undefined) | undefined =
-  findModuleExport(
-    (value: unknown) =>
-      typeof value === 'function' && value.toString().includes('useControllerButtonFeed'),
-  );
+interface ButtonState {
+  bLeftBumper?: boolean;
+  bRightBumper?: boolean;
+  bLeftStickClick?: boolean;
+  bRightStickClick?: boolean;
+}
+const useButtonFeed: ((index: number) => ButtonState | undefined) | undefined = findModuleExport(
+  (value: unknown) =>
+    typeof value === 'function' && value.toString().includes('useControllerButtonFeed'),
+);
 
 const fullscreenWeb = callable<[url: string, title: string], void>('toggle_web_fullscreen');
+const zoomWeb = callable<[url: string, action: ZoomAction, title: string], unknown>(
+  'zoom_web_page',
+);
+const zoomReader = callable<[path: string, action: ZoomAction], void>('zoom_reader');
 
-const FullscreenInput = ({ controllerIndex }: { controllerIndex: number }) => {
+const ReaderButtons = ({
+  controllerIndex,
+  path,
+  fullscreen,
+}: {
+  controllerIndex: number;
+  path?: string;
+  fullscreen: boolean;
+}) => {
   const buttons = useButtonFeed!(controllerIndex);
-  // A stick already held while enabling/opening must be released first.
-  const previous = useRef(true);
+  // Keys held while opening/changing the reader must be released first.
+  const previous = useRef([true, true, true, true]);
   const inFlight = useRef(false);
-  const pressed = buttons?.bRightStickClick;
+  const smaller = buttons?.bLeftBumper;
+  const larger = buttons?.bRightBumper;
+  const reset = buttons?.bLeftStickClick;
+  const full = buttons?.bRightStickClick;
   useEffect(() => {
-    if (pressed === undefined) return;
-    const trigger = pressed && !previous.current;
-    previous.current = pressed;
-    const page = webPage();
-    if (!trigger || inFlight.current || !page) return;
+    const states = [smaller, larger, reset, full];
+    const edges = states.map((pressed, index) => {
+      if (pressed === undefined) return false;
+      const trigger = pressed && !previous.current[index];
+      previous.current[index] = pressed;
+      return trigger;
+    });
+    const index = edges.findIndex(Boolean);
+    if (index < 0 || inFlight.current || (index === 3 && (path || !fullscreen))) return;
+    const page = path ? undefined : webPage();
+    if (!path && !page) return;
+    const action = (['smaller', 'larger', 'default'] as const)[index];
     inFlight.current = true;
-    void fullscreenWeb(page.url, page.title)
+    const command =
+      index === 3
+        ? fullscreenWeb(page!.url, page!.title)
+        : path
+          ? zoomReader(path, action)
+          : zoomWeb(page!.url, action, page!.title);
+    void command
       .catch((error: unknown) =>
-        toaster.toast({ title: '视频全屏快捷键发送失败', body: String(error) }),
+        toaster.toast({
+          title: index === 3 ? '视频全屏快捷键发送失败' : '缩放快捷键执行失败',
+          body: String(error),
+        }),
       )
       .finally(() => {
         inFlight.current = false;
       });
-  }, [pressed]);
+  }, [smaller, larger, reset, full, path, fullscreen]);
   return null;
 };
 
@@ -136,8 +173,13 @@ export const ReaderInput = ({
   return (
     <>
       {useAxesFeed && <NativeReaderInput path={path} controllerIndex={controllerIndex} />}
-      {!path && fullscreen && useButtonFeed && (
-        <FullscreenInput key={controllerIndex} controllerIndex={controllerIndex} />
+      {useButtonFeed && (
+        <ReaderButtons
+          key={`${controllerIndex}:${path ?? 'web'}`}
+          controllerIndex={controllerIndex}
+          path={path}
+          fullscreen={fullscreen}
+        />
       )}
     </>
   );
