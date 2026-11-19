@@ -4,6 +4,7 @@ import type { ComponentProps, ReactNode } from 'react';
 
 import { PhoneUrlModal } from './phone-url-modal';
 import { useGlobalState } from '../hooks/global-state';
+import { ViewMode } from '../lib/util';
 import {
   startUrlInputMock,
   getUrlInputStatusMock,
@@ -38,11 +39,11 @@ const flush = async () => {
 };
 
 describe('QR URL input modal', () => {
-  let state: { url: string; visible: boolean };
+  let state: { url: string; visible: boolean; viewMode: ViewMode };
 
   beforeEach(() => {
     vi.useFakeTimers();
-    state = { url: 'file:///guide.JPG', visible: true };
+    state = { url: 'file:///guide.JPG', visible: true, viewMode: ViewMode.Closed };
     vi.mocked(useGlobalState).mockReturnValue([
       state,
       (updater: (s: typeof state) => typeof state) => {
@@ -205,6 +206,7 @@ describe('QR URL input modal', () => {
     expect(cancelUrlInputMock).not.toHaveBeenCalled();
     await act(async () => vi.advanceTimersByTimeAsync(1000));
     expect(state.url).toBe(url);
+    expect(state.viewMode).toBe(ViewMode.Sidebar);
     expect(close).toHaveBeenCalledOnce();
     unmount();
   });

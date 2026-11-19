@@ -81,26 +81,29 @@ describe('Settings', () => {
     localStorage.clear();
   });
 
-  it.each([ViewMode.Picture, ViewMode.Expand, ViewMode.Minimised, ViewMode.Closed])(
-    'opens settings directly in sidebar mode from legacy mode %s',
-    (mode) => {
-      let state = createState(mode);
-      vi.mocked(useGlobalState).mockReturnValue([
-        state,
-        (updater: (s: typeof state) => typeof state) => {
-          state = updater(state);
-        },
-        {},
-      ] as never);
-      render(<Settings />);
-      expect(state.viewMode).toBe(ViewMode.Sidebar);
-      expect(state.visible).toBe(true);
-      for (const label of ['布局', '展开', '控制栏', '位置', '大小', '边距']) {
-        expect(screen.queryByLabelText(label)).toBeNull();
-        expect(screen.queryByText(label)).toBeNull();
-      }
-    },
-  );
+  it.each([
+    ViewMode.Picture,
+    ViewMode.Expand,
+    ViewMode.Minimised,
+    ViewMode.Closed,
+    ViewMode.Sidebar,
+  ])('preserves the reader switch when opening settings in mode %s', (mode) => {
+    let state = createState(mode);
+    vi.mocked(useGlobalState).mockReturnValue([
+      state,
+      (updater: (s: typeof state) => typeof state) => {
+        state = updater(state);
+      },
+      {},
+    ] as never);
+    render(<Settings />);
+    expect(state.viewMode).toBe(mode);
+    expect(state.visible).toBe(true);
+    for (const label of ['布局', '展开', '控制栏', '位置', '大小', '边距']) {
+      expect(screen.queryByLabelText(label)).toBeNull();
+      expect(screen.queryByText(label)).toBeNull();
+    }
+  });
 
   it('offers optional sidebar space control for websites only', () => {
     let state = {
@@ -154,11 +157,22 @@ describe('Settings', () => {
       {},
     ] as never);
     render(<Settings />);
-    expect(state.viewMode).toBe(ViewMode.Sidebar);
-    // Model closing the page while the settings panel remains mounted.
-    state = createState(ViewMode.Closed);
+    expect(state.viewMode).toBe(ViewMode.Closed);
     fireEvent.click(screen.getByText('打开'));
     expect(state.viewMode).toBe(ViewMode.Sidebar);
+  });
+
+  it('keeps a closed reader closed when leaving and reopening settings', () => {
+    let state = createState(ViewMode.Closed);
+    const setter = (updater: (s: typeof state) => typeof state) => {
+      state = updater(state);
+    };
+    vi.mocked(useGlobalState).mockReturnValue([state, setter, {}] as never);
+    const { unmount } = render(<Settings />);
+    unmount();
+    render(<Settings />);
+    expect(state.viewMode).toBe(ViewMode.Closed);
+    expect(screen.getByText('打开')).toBeTruthy();
   });
 
   it('handles address modal and close in sidebar mode', () => {

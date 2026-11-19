@@ -52,7 +52,7 @@ describe('UrlModal', () => {
   });
 
   it('hides on mount and restores visibility on unmount', () => {
-    let state = createState();
+    let state = { ...createState(), viewMode: ViewMode.Closed };
     const setGlobalState = vi.fn((updater: (s: typeof state) => typeof state) => {
       state = updater(state);
     });
@@ -68,8 +68,8 @@ describe('UrlModal', () => {
     expect(state.visible).toBe(true);
   });
 
-  it('updates url and visibility when confirmed', () => {
-    let state = createState();
+  it('opens the selected url even when the reader was closed', () => {
+    let state = { ...createState(), viewMode: ViewMode.Closed };
     const setGlobalState = vi.fn((updater: (s: typeof state) => typeof state) => {
       state = updater(state);
     });
@@ -83,6 +83,7 @@ describe('UrlModal', () => {
 
     expect(state.url).toBe('https://youtube.com');
     expect(state.visible).toBe(true);
+    expect(state.viewMode).toBe(ViewMode.Sidebar);
   });
 
   it('does not cause infinite loop from unstable setGlobalState reference', () => {
@@ -101,7 +102,7 @@ describe('UrlModal', () => {
   });
 
   it('restores visibility when cancelled', () => {
-    let state = createState();
+    let state = { ...createState(), viewMode: ViewMode.Closed };
     const setGlobalState = vi.fn((updater: (s: typeof state) => typeof state) => {
       state = updater(state);
     });
@@ -113,5 +114,6 @@ describe('UrlModal', () => {
 
     expect(state.visible).toBe(true);
     expect(state.url).toBe('https://netflix.com');
+    expect(state.viewMode).toBe(ViewMode.Closed);
   });
 });

@@ -6,7 +6,6 @@ import {
   Field,
   DialogButton,
 } from '@decky/ui';
-import { useEffect } from 'react';
 
 import { ViewMode } from '../lib/util';
 import { historyLabel } from '../lib/url-history';
@@ -17,15 +16,6 @@ export const Settings = () => {
     { viewMode, url, sidebarVideoSpace, rightStickFullscreen, pageTitle, pageTitleUrl },
     setGlobalState,
   ] = useGlobalState();
-
-  useEffect(() => {
-    setGlobalState((state) => ({
-      ...state,
-      visible: true,
-      viewMode: ViewMode.Sidebar,
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <>
@@ -123,6 +113,7 @@ export const Settings = () => {
               setGlobalState((state) => ({
                 ...state,
                 activePanel: undefined,
+                visible: true,
                 viewMode: state.viewMode === ViewMode.Closed ? ViewMode.Sidebar : ViewMode.Closed,
               }))
             }

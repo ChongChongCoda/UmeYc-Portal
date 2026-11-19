@@ -1,6 +1,8 @@
 import type { ReactElement } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { StateManager } from 'cotton-box';
+import { ViewMode } from './lib/util';
+import { PORTAL_STORAGE_KEY } from './lib/storage';
 
 vi.mock('@decky/ui', () => ({
   quickAccessMenuClasses: {
@@ -16,19 +18,20 @@ vi.mock('./components/settings', () => ({
   Settings: () => <div>Settings</div>,
 }));
 
-vi.mock('./lib/storage', () => ({
-  PORTAL_STORAGE_KEY: 'decky.portal.test',
-  getPersistedPortalState: vi.fn(() => ({
-    margin: 15,
-    size: 1.2,
-    url: 'https://youtube.com',
-  })),
-}));
+const loadState = async () => {
+  await import('./index');
+  const { routerHook } = await import('./__mocks__/decky-api');
+  const factory = vi
+    .mocked(routerHook.addGlobalComponent)
+    .mock.calls.slice(-1)[0][1] as () => ReactElement;
+  return factory().props.value as StateManager<Record<string, unknown>>;
+};
 
 describe('plugin entrypoint', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it('registers and deregisters global components', async () => {
@@ -58,7 +61,7 @@ describe('plugin entrypoint', () => {
 
     const provider = globalComponentFactory!();
     const stateManager = provider.props.value as StateManager<Record<string, unknown>>;
-    expect(stateManager.get().viewMode).toBe(5);
+    expect(stateManager.get().viewMode).toBe(ViewMode.Closed);
     expect(stateManager.get().rightStickFullscreen).toBe(false);
 
     stateManager.set({
@@ -75,6 +78,7 @@ describe('plugin entrypoint', () => {
     expect(setItemSpy).toHaveBeenCalledWith(
       PORTAL_STORAGE_KEY,
       JSON.stringify({
+        viewMode: ViewMode.Sidebar,
         position: 3,
         margin: 45,
         size: 1.3,
@@ -83,4 +87,46 @@ describe('plugin entrypoint', () => {
       }),
     );
   });
+
+  it('starts closed on first install and when upgrading preferences without a saved switch', async () => {
+    expect((await loadState()).get().viewMode).toBe(ViewMode.Closed);
+    localStorage.setItem(
+      PORTAL_STORAGE_KEY,
+      JSON.stringify({ margin: 15, size: 1.2, url: 'https://youtube.com' }),
+    );
+    vi.resetModules();
+    expect((await loadState()).get()).toMatchObject({
+      viewMode: ViewMode.Closed,
+      margin: 15,
+      size: 1.2,
+      url: 'https://youtube.com',
+    });
+  });
+
+  it.each([ViewMode.Closed, ViewMode.Sidebar])(
+    'restores the saved switch %s after reinitialization without restoring temporary panels',
+    async (viewMode) => {
+      const state = await loadState();
+      state.set({
+        ...state.get(),
+        viewMode: ViewMode.Sidebar,
+        url: 'https://example.com/guide',
+        sidebarVideoSpace: true,
+        rightStickFullscreen: true,
+      });
+      state.set({ ...state.get(), viewMode, visible: false, activePanel: 'url' });
+      const plugin = (await import('./index')).default as unknown as { onDismount: () => void };
+      plugin.onDismount();
+      vi.resetModules();
+      const restored = (await loadState()).get();
+      expect(restored).toMatchObject({
+        viewMode,
+        url: 'https://example.com/guide',
+        sidebarVideoSpace: true,
+        rightStickFullscreen: true,
+        visible: true,
+      });
+      expect(restored.activePanel).toBeUndefined();
+    },
+  );
 });

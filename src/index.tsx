@@ -12,7 +12,7 @@ import { rememberUrl } from './lib/url-history';
 
 export default definePlugin(() => {
   const defaultState: State = {
-    viewMode: ViewMode.Sidebar,
+    viewMode: ViewMode.Closed,
     previousViewMode: ViewMode.Sidebar,
     visible: true,
     position: Position.TopRight,
@@ -30,16 +30,26 @@ export default definePlugin(() => {
   });
 
   let lastUrl: string | undefined;
-  state.watch(({ position, margin, size, url, sidebarVideoSpace, rightStickFullscreen }) => {
-    localStorage.setItem(
-      PORTAL_STORAGE_KEY,
-      JSON.stringify({ position, margin, size, url, sidebarVideoSpace, rightStickFullscreen }),
-    );
-    if (url !== lastUrl) {
-      lastUrl = url;
-      rememberUrl(localStorage, url);
-    }
-  });
+  state.watch(
+    ({ viewMode, position, margin, size, url, sidebarVideoSpace, rightStickFullscreen }) => {
+      localStorage.setItem(
+        PORTAL_STORAGE_KEY,
+        JSON.stringify({
+          viewMode: viewMode === ViewMode.Closed ? ViewMode.Closed : ViewMode.Sidebar,
+          position,
+          margin,
+          size,
+          url,
+          sidebarVideoSpace,
+          rightStickFullscreen,
+        }),
+      );
+      if (url !== lastUrl) {
+        lastUrl = url;
+        rememberUrl(localStorage, url);
+      }
+    },
+  );
 
   routerHook.addGlobalComponent('Portal', () => {
     return (

@@ -13,6 +13,7 @@ import {
 } from '../lib/phone-input';
 import { modalWithState } from './modal';
 import { QrCode } from './qr-code';
+import { ViewMode } from '../lib/util';
 
 export const PhoneUrlModal = (props: ModalRootProps) => {
   const [, setGlobalState] = useGlobalState();
@@ -37,7 +38,12 @@ export const PhoneUrlModal = (props: ModalRootProps) => {
         const result = await getUrlInputStatus(sessionId!);
         if (disposed) return;
         if (result.status === 'received') {
-          setGlobalState((state) => ({ ...state, url: result.url, visible: true }));
+          setGlobalState((state) => ({
+            ...state,
+            url: result.url,
+            visible: true,
+            viewMode: ViewMode.Sidebar,
+          }));
           props.closeModal?.();
         } else if (result.status === 'expired') {
           setError('二维码已过期，请刷新后重新扫码。');

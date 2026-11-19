@@ -6,6 +6,7 @@ import { modalWithState } from './modal';
 import { useGlobalState } from '../hooks/global-state';
 import { editableAddress, localPathFromUrl, prepareLocalFile } from '../lib/local-files';
 import { UrlHistoryList } from './url-history-list';
+import { ViewMode } from '../lib/util';
 
 export const UrlModal = (props: ModalRootProps) => {
   const [{ url }, setGlobalState] = useGlobalState();
@@ -38,7 +39,12 @@ export const UrlModal = (props: ModalRootProps) => {
       const path = localPathFromUrl(address);
       if (path) await prepareLocalFile(path);
       if (!lifetime.active) return;
-      setGlobalState((state) => ({ ...state, visible: true, url: address }));
+      setGlobalState((state) => ({
+        ...state,
+        visible: true,
+        url: address,
+        viewMode: ViewMode.Sidebar,
+      }));
       props.closeModal?.();
     } catch (cause) {
       if (lifetime.active) setError(`无法打开网页或本地文件：${String(cause)}`);
