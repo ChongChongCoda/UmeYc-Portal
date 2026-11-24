@@ -42,10 +42,16 @@ class LocalAppTests(unittest.IsolatedAsyncioTestCase):
             page = response.read().decode()
             csp = response.headers['Content-Security-Policy']
             self.assertIn('3D', page)
+            self.assertIn('__portal_touch.js', page)
             self.assertIn("script-src 'self'", csp)
             self.assertIn("connect-src 'none'", csp)
             self.assertIn('private', response.headers['Cache-Control'])
             etag = response.headers['ETag']
+        touch_url = opened['url'].replace('world.html', '__portal_touch.js')
+        with urlopen(touch_url) as response:
+            script = response.read().decode()
+            self.assertIn('__portalTouch', script)
+            self.assertTrue(response.headers['Content-Type'].startswith('application/javascript'))
         script = opened['url'].replace('world.html', 'app.js')
         with urlopen(script) as response:
             self.assertEqual(response.read(), b'window.atlas = true;')

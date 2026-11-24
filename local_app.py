@@ -32,6 +32,9 @@ APP_POLICY = (
     "form-action 'none'"
 )
 KNOWN_ENTRIES = ("index.html", "world.html", "items.html")
+TOUCH_SCRIPT_ROUTE = "__portal_touch.js"
+TOUCH_SCRIPT_ASSET = "local-app-touch.js"
+TOUCH_INJECTION_VERSION = "pt1"
 MAX_GRANTS = 32
 
 
@@ -175,6 +178,9 @@ class LocalAppHandler(BaseHTTPRequestHandler):
             return
         if not relative or urlsplit(self.path).path.endswith("/"):
             relative.append("index.html")
+        if relative == [TOUCH_SCRIPT_ROUTE]:
+            self._serve_touch_script(head)
+            return
         try:
             target = root.joinpath(*relative).resolve(strict=True)
         except (OSError, RuntimeError):
@@ -189,6 +195,71 @@ class LocalAppHandler(BaseHTTPRequestHandler):
         except OSError:
             self.send_error(404)
             return
+        content_type = self._content_type(target)
+        payload = None
+        length = info.st_size
+        etag = f'"{info.st_size:x}-{info.st_mtime_ns:x}"'
+        if target.suffix.lower() in {".html", ".htm"}:
+            try:
+                text = source.read().decode("utf-8")
+            except UnicodeDecodeError:
+                source.seek(0)
+            except OSError:
+                source.close()
+                self.send_error(404)
+                return
+            else:
+                tag = f'<script src="/app/{token}/{TOUCH_SCRIPT_ROUTE}"></script>'
+                if TOUCH_SCRIPT_ROUTE not in text:
+                    if "</body>" in text:
+                        text = text.replace("</body>", tag + "\n</body>", 1)
+                    else:
+                        text += tag
+                payload = text.encode("utf-8")
+                source.close()
+                source = None
+                length = len(payload)
+                etag = f'"{length:x}-touch{TOUCH_INJECTION_VERSION}"'
+        if self.headers.get("If-None-Match") == etag:
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", "private, max-age=0, must-revalidate")
+            self.send_header("Content-Security-Policy", APP_POLICY)
+            self.end_headers()
+            if source is not None:
+                source.close()
+            self.close_connection = True
+            return
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(length))
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", "private, max-age=0, must-revalidate")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Content-Security-Policy", APP_POLICY)
+            self.end_headers()
+            if not head:
+                try:
+                    if payload is not None:
+                        self.wfile.write(payload)
+                    elif source is not None:
+                        shutil.copyfileobj(source, self.wfile, length=1024 * 1024)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+        finally:
+            if source is not None:
+                source.close()
+
+    def _serve_touch_script(self, head):
+        path = Path(__file__).with_name("assets").joinpath(TOUCH_SCRIPT_ASSET)
+        try:
+            info = path.stat()
+            source = path.open("rb")
+        except OSError:
+            self.send_error(404)
+            return
         etag = f'"{info.st_size:x}-{info.st_mtime_ns:x}"'
         if self.headers.get("If-None-Match") == etag:
             self.send_response(304)
@@ -199,10 +270,9 @@ class LocalAppHandler(BaseHTTPRequestHandler):
             source.close()
             self.close_connection = True
             return
-        content_type = self._content_type(target)
         try:
             self.send_response(200)
-            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Type", "application/javascript; charset=utf-8")
             self.send_header("Content-Length", str(info.st_size))
             self.send_header("ETag", etag)
             self.send_header("Cache-Control", "private, max-age=0, must-revalidate")
