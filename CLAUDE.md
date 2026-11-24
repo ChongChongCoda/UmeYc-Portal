@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **接手本 fork 时先读 [`HANDOFF.md`](HANDOFF.md)。** 它记录了当前版本（`1.0.0-zh-cn.42`）、已实现功能、实机待验证项、构建/发布流程、已知坑和文件地图。下面是上游架构说明，其中 “Phase 0” 等阶段描述已经过时。
+> **接手本 fork 时先读 [`README.md`](README.md) 顶部的阅读顺序**，然后看 [`HANDOFF.md`](HANDOFF.md)。HANDOFF 记录了当前版本（`1.0.0-zh-cn.42`）、已实现功能、实机待验证项、构建/发布流程、已知坑和文件地图。下面是上游架构说明，其中 “Phase 0” 等阶段描述已经过时。
 
 ## Project Overview
 

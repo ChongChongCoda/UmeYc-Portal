@@ -2,6 +2,18 @@
 
 在 Steam Deck 游戏模式中打开网页、阅读本地攻略长图，支持随侧栏显示、右摇杆滚动，以及扫码发送网址或上传图片。
 
+> **接手这个项目（新电脑解压后）**
+>
+> 当前版本 `1.0.0-zh-cn.42`。对 Claude Code 说：**先读 README.md，再按里面的顺序接手这个项目。**
+>
+> 阅读顺序：
+> 1. 本文件「功能 / 安装」：快速了解插件能力；
+> 2. [HANDOFF.md](HANDOFF.md)：**最重要的进度文档**——当前状态、实机待验证项、环境搭建、构建/发布流程、已知坑、文件地图；
+> 3. [CLAUDE.md](CLAUDE.md)：代码架构、状态管理和开发约定；
+> 4. 按需读 `docs/OFFLINE_CAPTURE_VERIFICATION.md`（离线抓取）和 `docs/LOCAL_ATLAS.md`（地图册）。
+>
+> 新电脑先装 Node.js ≥ 22、Python ≥ 3.9，然后在项目根执行 `corepack pnpm@9.15.9 install --frozen-lockfile`。`out/UmeYc-Portal.zip` 是可直接安装的 .42 构建；完整 git 历史在 `.git` 中。
+
 [English / 上游说明](README.en.md) · [实机验证记录](docs/LOCAL_FILES_VERIFICATION.md)
 
 ![Steam Deck 游戏模式实机截图：左侧本地攻略与右侧 UmeYc-Portal 设置同时显示](docs/images/portal-sidebar.png)

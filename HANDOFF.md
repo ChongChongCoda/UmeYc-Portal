@@ -1,10 +1,10 @@
 # UmeYc-Portal 交接文档
 
-> 更新时间：2026-11-24 · 当前版本：`1.0.0-zh-cn.42` · 最新提交：`7d26746`
+> 更新时间：2026-11-24 · 当前版本：`1.0.0-zh-cn.42`（最新提交见 `git log`）
 >
-> **给接手的 Claude：** 先读本文件，再读仓库根的 `CLAUDE.md`（上游架构说明）。本文件是实际进度、待办、构建/发布流程和踩坑记录的权威来源。用户使用简体中文交流。
+> **给接手的 Claude：** 先读仓库根的 `README.md`，按它顶部的阅读顺序接手；本文件是第 2 步，也是实际进度、待办、构建/发布流程和踩坑记录的权威来源。用户使用简体中文交流。
 >
-> **给用户：** 在新电脑解压后用 Claude Code 打开这个文件夹，说一句「先读 HANDOFF.md，然后继续」即可。
+> **给用户：** 在新电脑解压后用 Claude Code 打开这个文件夹，说一句「先读 README.md，再按里面的顺序接手这个项目」即可。
 
 ---
 
@@ -287,7 +287,7 @@ curl -s https://api.github.com/repos/ChongChongCoda/UmeYc-Portal/releases/latest
 
 ## 10. 给接手的 Claude 的开工提示
 
-1. 读 `HANDOFF.md` → `README.md` → `CLAUDE.md` → `docs/OFFLINE_CAPTURE_VERIFICATION.md`。
+1. 按 `README.md` 顶部的顺序：`README.md` → `HANDOFF.md` → `CLAUDE.md` → `docs/OFFLINE_CAPTURE_VERIFICATION.md`。
 2. `git log -10`、`git tag --sort=-creatordate | head` 确认上下文。
 3. 先跑 `corepack pnpm@9.15.9 install --frozen-lockfile` 和 `corepack pnpm@9.15.9 test:coverage`，确认基线。
 4. 优先向用户确认第 3 节实机验证结果，再决定改哪里；不要在未确认的情况下大改离线/更新逻辑。
