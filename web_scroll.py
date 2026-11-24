@@ -88,9 +88,20 @@ class WebScroller:
         # choose between two pages with the same title.
         if title:
             origin = urlsplit(url)
-            return [page for page in pages if page.get("title") == title and
-                    (urlsplit(page.get("url", "")).scheme, urlsplit(page.get("url", "")).netloc)
-                    == (origin.scheme, origin.netloc)]
+            by_title = [
+                page
+                for page in pages
+                if page.get("title") == title
+                and (
+                    urlsplit(page.get("url", "")).scheme,
+                    urlsplit(page.get("url", "")).netloc,
+                )
+                == (origin.scheme, origin.netloc)
+            ]
+            if by_title:
+                return by_title
+            # Steam's BrowserView title can lag behind a navigation; fall back
+            # to the URL/path match instead of failing the toolbar action.
         matches = [page for page in pages if page.get("url") == url]
         if matches:
             return matches
@@ -100,8 +111,22 @@ class WebScroller:
         def route(address):
             parsed = urlsplit(address)
             return parsed.scheme, parsed.netloc, parsed.path
-        return [page for page in pages if page.get("type") == "page" and
-                route(page.get("url", "")) == route(target.geturl())]
+        matches = [page for page in pages if
+                   route(page.get("url", "")) == route(target.geturl())]
+        if matches:
+            return matches
+        # A QR transfer can leave the reader on the share link while the
+        # browser has already followed a redirect, so neither URL nor title
+        # matches before the next state sync. The plugin owns a single web
+        # BrowserView: accept it only when exactly one non-Steam page exists.
+        def is_web_page(page):
+            parsed = urlsplit(page.get("url", ""))
+            return (
+                parsed.scheme in {"http", "https"}
+                and parsed.hostname not in {"steamloopback.host", "127.0.0.1", "localhost"}
+            )
+        web_pages = [page for page in pages if is_web_page(page)]
+        return web_pages if len(web_pages) == 1 else []
 
     async def scroll(self, url, x, y, width, height, title=""):
         self._validate_url(url)

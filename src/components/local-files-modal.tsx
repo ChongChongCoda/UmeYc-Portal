@@ -915,7 +915,9 @@ export const LocalFilesModal = (props: ModalRootProps) => {
           </div>
           {collections.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ fontSize: 12, opacity: 0.7 }}>离线网页</div>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>
+                离线网页（断网后重新打开原网址会自动转到本地副本）
+              </div>
               <div
                 style={{
                   maxHeight: '24vh',

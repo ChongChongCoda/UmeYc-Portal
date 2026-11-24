@@ -177,6 +177,29 @@ class WebScrollTests(unittest.IsolatedAsyncioTestCase):
         exact = {"type": "page", "url": original}
         self.assertEqual(self.scroller._matching_pages([exact, rewritten], original), [exact])
 
+    async def test_falls_back_to_url_when_the_browser_title_is_stale(self):
+        pages = [
+            {"type": "page", "url": "https://guide.example/a", "title": "新标题"},
+        ]
+        self.assertEqual(
+            self.scroller._matching_pages(pages, "https://guide.example/a", "旧标题"),
+            pages,
+        )
+
+    async def test_redirected_share_link_resolves_only_a_sole_web_page(self):
+        steam = {"type": "page", "url": "https://steamloopback.host/index.html", "title": "Steam"}
+        guide = {"type": "page", "url": "https://guide.example/final", "title": "攻略"}
+        for title in ["", "攻略"]:
+            self.assertEqual(
+                self.scroller._matching_pages([steam, guide], "https://share.example/x", title),
+                [guide],
+            )
+        other = {"type": "page", "url": "https://other.example/final", "title": "其他"}
+        self.assertEqual(
+            self.scroller._matching_pages([steam, guide, other], "https://share.example/x", ""),
+            [],
+        )
+
     async def test_episode_switch_uses_current_title_and_returns_actual_url(self):
         old = {"type": "page", "url": "https://video.example/episode/1", "title": "第一集"}
         new = {"type": "page", "url": "https://video.example/episode/2", "title": "第二集"}
@@ -201,14 +224,12 @@ class WebScrollTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("h1.video-title", expression)
         self.assertIn("location.href", expression)
 
-    async def test_title_fallback_rejects_duplicates_other_origins_and_old_title(self):
+    async def test_title_fallback_rejects_duplicate_portal_pages(self):
         original = "https://video.example/episode/1"
         page = {"type": "page", "url": "https://video.example/episode/2", "title": "第二集"}
-        for pages in [[page, dict(page)], [{**page, "url": "https://other.example/episode/2"}],
-                      [{**page, "title": "第一集"}]]:
-            with patch.object(self.scroller, "_pages", AsyncMock(return_value=pages)):
-                with self.subTest(pages=pages), self.assertRaises(ValueError):
-                    await self.scroller.page_state(original, "第二集")
+        with patch.object(self.scroller, "_pages", AsyncMock(return_value=[page, dict(page)])):
+            with self.assertRaises(ValueError):
+                await self.scroller.page_state(original, "第二集")
 
     async def test_current_title_change_rebinds_an_existing_input_connection(self):
         self.socket.receive_json.side_effect = [{"id": i} for i in range(1, 5)]

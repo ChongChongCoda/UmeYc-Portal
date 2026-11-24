@@ -1,4 +1,5 @@
 import { callable, toaster } from '@decky/api';
+import { UPLOAD_DIRECTORY_KEY } from './phone-input';
 
 export interface OfflineCollection {
   id: string;
@@ -71,7 +72,7 @@ export const watchOfflineSave = (): void => {
             title: '离线保存完成',
             body: `${status.collection?.title || '网页'}${
               pages ? `（含 ${pages} 个链接页面）` : ''
-            }`,
+            }。断网后请从「本地文件 → 离线网页」打开`,
           });
         } else if (status?.status === 'error') {
           toaster.toast({ title: '离线保存失败', body: status.message });
@@ -114,6 +115,27 @@ export const openOfflineCollection = callable<[token: string], { url: string }>(
 export const deleteOfflineCollection = callable<[token: string], DeletedOfflineCollection>(
   'delete_offline_collection',
 );
+
+const normalizePageUrl = (value: string): string => value.split('#')[0].replace(/\/+$/, '');
+
+export const findOfflineCollection = (
+  collections: OfflineCollection[],
+  url: string,
+): OfflineCollection | null => {
+  const target = normalizePageUrl(url);
+  return collections.find((entry) => normalizePageUrl(entry.url) === target) ?? null;
+};
+
+/**
+ * Resolve a web URL to its saved collection without requiring the caller to
+ * know the current save directory. Used when the Deck is already offline:
+ * re-clicking a web history entry should open the local copy instead of a
+ * network error page.
+ */
+export const findSavedOfflinePage = async (url: string): Promise<OfflineCollection | null> => {
+  const listing = await listOfflineCollections(localStorage.getItem(UPLOAD_DIRECTORY_KEY) || '');
+  return findOfflineCollection(listing.entries, url);
+};
 
 export const offlineStatusLabel = (status: string): string => {
   if (status === 'saved' || status === 'complete') return '已保存';

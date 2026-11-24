@@ -11,7 +11,11 @@ import { ReaderInput } from './reader-input';
 import { WebHeader, WEB_HEADER_HEIGHT } from './web-header';
 import { rememberPageTitle, rememberUrl, removeUrl } from '../lib/url-history';
 import { isLocalAppUrl, isLoopbackUrl } from '../lib/local-app';
-import { isOfflineCaptureActive } from '../lib/offline';
+import {
+  findSavedOfflinePage,
+  isOfflineCaptureActive,
+  openOfflineCollection,
+} from '../lib/offline';
 import { UrlModal } from './url-modal';
 import { PhoneUrlModal } from './phone-url-modal';
 import { LocalFilesModal } from './local-files-modal';
@@ -178,23 +182,46 @@ const Browser = ({
     observedUrl.current = null;
     pendingNavigation.current = url;
     let cancelled = false;
-    try {
+    const load = async () => {
       const path = localPathFromUrl(url);
       if (path !== null) {
-        void prepareLocalFile(path).then(
-          (result) => {
-            if (!cancelled) handles.view.LoadURL(result.url);
-          },
-          (error: unknown) => {
-            if (!cancelled) toaster.toast({ title: '无法打开本地文件', body: String(error) });
-          },
-        );
-      } else {
-        handles.view.LoadURL(url);
+        try {
+          const result = await prepareLocalFile(path);
+          if (!cancelled) handles.view.LoadURL(result.url);
+        } catch (error) {
+          if (!cancelled) toaster.toast({ title: '无法打开本地文件', body: String(error) });
+        }
+        return;
       }
-    } catch (error) {
-      toaster.toast({ title: '无法打开本地文件', body: String(error) });
-    }
+      let target = url;
+      // Turning Wi-Fi off must not strand a page that was already saved
+      // offline. Only a page whose saved source URL matches is substituted.
+      if (
+        typeof window !== 'undefined' &&
+        window.navigator?.onLine === false &&
+        /^https?:\/\//i.test(url) &&
+        !isLoopbackUrl(url)
+      ) {
+        try {
+          const saved = await findSavedOfflinePage(url);
+          if (saved) {
+            target = (await openOfflineCollection(saved.open_token)).url;
+            if (!cancelled) {
+              toaster.toast({ title: '已打开离线副本', body: saved.title });
+            }
+          }
+        } catch {
+          // Keep the original URL; a real network failure is shown there.
+        }
+      }
+      if (cancelled) return;
+      try {
+        handles.view.LoadURL(target);
+      } catch (error) {
+        toaster.toast({ title: '无法打开本地文件', body: String(error) });
+      }
+    };
+    void load();
     return () => {
       cancelled = true;
     };

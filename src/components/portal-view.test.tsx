@@ -8,11 +8,17 @@ import {
 } from '../__mocks__/decky-api';
 import { toLocalFileUrl } from '../lib/local-files';
 import { getOpenSideMenu, isSteamBlockingUI, isVirtualKeyboardShowing } from '../lib/menu-state';
+import { findSavedOfflinePage, openOfflineCollection } from '../lib/offline';
 
 vi.mock('../lib/menu-state', () => ({
   getOpenSideMenu: vi.fn(),
   isVirtualKeyboardShowing: vi.fn(),
   isSteamBlockingUI: vi.fn(),
+}));
+vi.mock('../lib/offline', () => ({
+  isOfflineCaptureActive: vi.fn(() => false),
+  findSavedOfflinePage: vi.fn(),
+  openOfflineCollection: vi.fn(),
 }));
 vi.mock('./reader-input', () => ({ ReaderInput: () => <div data-testid="reader-input" /> }));
 vi.mock('./url-modal', () => ({ UrlModal: () => <div>url panel</div> }));
@@ -72,6 +78,8 @@ describe('PortalView and PortalViewOuter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getWebPageStateMock.mockReset();
+    vi.mocked(findSavedOfflinePage).mockReset();
+    vi.mocked(openOfflineCollection).mockReset();
     vi.mocked(getOpenSideMenu).mockReturnValue(2);
     vi.mocked(isVirtualKeyboardShowing).mockReturnValue(undefined);
     vi.mocked(isSteamBlockingUI).mockReturnValue(false);
@@ -112,6 +120,81 @@ describe('PortalView and PortalViewOuter', () => {
         },
       },
     },
+  });
+
+  it('opens a saved offline copy when the Deck has no network', async () => {
+    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
+    vi.mocked(findSavedOfflinePage).mockResolvedValue({
+      id: 'one',
+      title: '攻略',
+      url: 'https://netflix.com',
+      created_at: 1,
+      pages: 1,
+      status: 'saved',
+      open_token: 'open',
+      delete_token: 'delete',
+    });
+    vi.mocked(openOfflineCollection).mockResolvedValue({
+      url: 'http://127.0.0.1:9000/open/index.html',
+    });
+    const online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    try {
+      render(<PortalView />);
+      await waitFor(() =>
+        expect(loadURL).toHaveBeenCalledWith('http://127.0.0.1:9000/open/index.html'),
+      );
+      expect(findSavedOfflinePage).toHaveBeenCalledWith('https://netflix.com');
+    } finally {
+      online.mockRestore();
+    }
+  });
+
+  it('drops a pending offline lookup after the view unmounts', async () => {
+    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
+    let release: (value: null) => void = () => undefined;
+    vi.mocked(findSavedOfflinePage).mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    const online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    try {
+      const { unmount } = render(<PortalView />);
+      await waitFor(() => expect(findSavedOfflinePage).toHaveBeenCalled());
+      unmount();
+      await act(async () => {
+        release(null);
+      });
+      expect(loadURL).not.toHaveBeenCalled();
+    } finally {
+      online.mockRestore();
+    }
+  });
+
+  it('keeps the original URL offline when no saved copy matches', async () => {
+    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
+    vi.mocked(findSavedOfflinePage).mockResolvedValue(null);
+    const online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    try {
+      render(<PortalView />);
+      await waitFor(() => expect(loadURL).toHaveBeenCalledWith('https://netflix.com'));
+      expect(openOfflineCollection).not.toHaveBeenCalled();
+    } finally {
+      online.mockRestore();
+    }
+  });
+
+  it('falls back to the network URL when the offline listing fails', async () => {
+    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
+    vi.mocked(findSavedOfflinePage).mockRejectedValue(new Error('SD card missing'));
+    const online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    try {
+      render(<PortalView />);
+      await waitFor(() => expect(loadURL).toHaveBeenCalledWith('https://netflix.com'));
+      expect(openOfflineCollection).not.toHaveBeenCalled();
+    } finally {
+      online.mockRestore();
+    }
   });
 
   it('releases composition and reader input for Steam blocking UI, then restores the page', async () => {
