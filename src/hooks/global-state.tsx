@@ -15,10 +15,6 @@ export interface State {
   controlBar: boolean;
   sidebarVideoSpace?: boolean;
   rightStickFullscreen?: boolean;
-  /** Reader hidden by the collapse button; the browser view stays alive. */
-  collapsed?: boolean;
-  /** Expanded from the floating restore button, independent of the QAM. */
-  manualVisible?: boolean;
   activePanel?: 'url' | 'phone' | 'files' | 'mapsearch';
   pageTitle?: string;
   pageTitleUrl?: string;

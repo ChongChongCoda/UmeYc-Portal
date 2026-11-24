@@ -35,6 +35,48 @@ export const getOpenSideMenu = (): number | undefined => {
 export const isVirtualKeyboardShowing = (): boolean | undefined =>
   menuWindow()?.VirtualKeyboardManager?.IsShowingVirtualKeyboard?.Value;
 
+const PORTAL_TITLE_SELECTOR = '[data-umeyc-title]';
+let portalTitleSeen = false;
+
+/**
+ * Decky renders a plugin's titleView only while that plugin's QAM page is
+ * open, so its presence tells us the user is on the Portal page rather than
+ * the plugin list. Older Decky versions may not expose it: fall back to the
+ * plain side-menu state until the marker has been seen once.
+ */
+type QueryableDocument = { querySelector?: (selector: string) => unknown };
+
+export const isPortalPageOpen = (
+  qamDocument: QueryableDocument | null | undefined,
+  mainDocument: QueryableDocument | null | undefined,
+  qamOpen: boolean,
+): boolean => {
+  for (const doc of [qamDocument, mainDocument]) {
+    try {
+      const marker = doc?.querySelector?.(PORTAL_TITLE_SELECTOR) as
+        | { getBoundingClientRect?: () => { width: number; height: number } }
+        | null
+        | undefined;
+      if (marker) {
+        // A retained but hidden titleView must not count as the open page.
+        const rect = marker.getBoundingClientRect?.();
+        if (!rect || rect.width > 0 || rect.height > 0) {
+          portalTitleSeen = true;
+          return true;
+        }
+      }
+    } catch {
+      // A QAM transition can detach the document mid-query.
+    }
+  }
+  return portalTitleSeen ? false : qamOpen;
+};
+
+/** Test hook: forget markers seen by earlier renders. */
+export const resetPortalPageDetection = (): void => {
+  portalTitleSeen = false;
+};
+
 // Authentication errors are full routes rather than ModalManager dialogs. Read
 // the main window even when a separate QAM/BrowserView currently owns focus.
 export const isSteamBlockingUI = (): boolean => {

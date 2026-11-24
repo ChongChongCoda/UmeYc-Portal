@@ -51,22 +51,6 @@ describe('web page header', () => {
     }
   });
 
-  it('offers a collapse action next to the zoom controls', () => {
-    const onCollapse = vi.fn();
-    render(
-      <WebHeader
-        title="攻略视频标题"
-        getUrl={() => 'https://guide.example/'}
-        x={0}
-        y={0}
-        width={506}
-        onCollapse={onCollapse}
-      />,
-    );
-    fireEvent.click(screen.getByRole('button', { name: '收起网页' }));
-    expect(onCollapse).toHaveBeenCalledOnce();
-  });
-
   it('resolves the current redirected URL on each press and releases the busy state', async () => {
     let url = 'https://guide.example/one';
     render(<WebHeader title="Guide" getUrl={() => url} x={0} y={0} width={506} />);

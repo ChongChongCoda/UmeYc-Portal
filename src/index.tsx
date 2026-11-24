@@ -23,7 +23,6 @@ export default definePlugin(() => {
     controlBar: false,
     sidebarVideoSpace: false,
     rightStickFullscreen: false,
-    collapsed: false,
   };
 
   const restored = getPersistedPortalState(localStorage);
@@ -74,7 +73,11 @@ export default definePlugin(() => {
 
   return {
     name: 'UmeYc-Portal',
-    titleView: <div className={quickAccessMenuClasses.Title}>UmeYc-Portal</div>,
+    titleView: (
+      <div className={quickAccessMenuClasses.Title} data-umeyc-title="true">
+        UmeYc-Portal
+      </div>
+    ),
     icon: <FaTv />,
     content: (
       <GlobalContext.Provider value={state}>
