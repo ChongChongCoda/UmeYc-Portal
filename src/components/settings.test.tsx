@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ComponentProps, ReactNode } from 'react';
 
 import { Settings } from './settings';
 import { useGlobalState } from '../hooks/global-state';
 import { Position, ViewMode } from '../lib/util';
 import { rememberUrl, rememberPageTitle } from '../lib/url-history';
+import { UPDATE_CHECK_AT_KEY, UPDATE_READY_KEY } from '../lib/updates';
+import { checkPluginUpdateMock, toaster } from '../__mocks__/decky-api';
 
 vi.mock('../hooks/global-state', () => ({
   useGlobalState: vi.fn(),
@@ -79,6 +81,11 @@ describe('Settings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    checkPluginUpdateMock.mockReset();
+    checkPluginUpdateMock.mockResolvedValue({
+      status: 'latest',
+      current: '1.0.0-zh-cn.36',
+    });
   });
 
   it.each([
@@ -274,5 +281,82 @@ describe('Settings', () => {
     fireEvent.click(toggle);
     expect(toggle.checked).toBe(true);
     expect(localStorage.getItem('portal.offlineAuto')).toBeNull();
+  });
+
+  it('downloads an update into Downloads and tells the user how to install it', async () => {
+    checkPluginUpdateMock.mockResolvedValueOnce({
+      status: 'downloaded',
+      current: '1.0.0-zh-cn.36',
+      version: '1.0.0-zh-cn.37',
+      path: '/home/deck/Downloads/UmeYc-Portal.zip',
+    });
+    const state = createState(ViewMode.Sidebar);
+    vi.mocked(useGlobalState).mockReturnValue([state, vi.fn(), {}] as never);
+    render(<Settings />);
+    fireEvent.click(screen.getByText('检查并下载更新'));
+    await waitFor(() =>
+      expect(toaster.toast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '更新已下载' }),
+      ),
+    );
+    expect(screen.getByText(/已下载 1\.0\.0-zh-cn\.37/)).toBeInTheDocument();
+    expect(screen.getByText(/\/home\/deck\/Downloads\/UmeYc-Portal\.zip/)).toBeInTheDocument();
+    expect(localStorage.getItem(UPDATE_READY_KEY)).toContain('1.0.0-zh-cn.37');
+  });
+
+  it('reports when the installed version is already current', async () => {
+    const state = createState(ViewMode.Sidebar);
+    vi.mocked(useGlobalState).mockReturnValue([state, vi.fn(), {}] as never);
+    render(<Settings />);
+    fireEvent.click(screen.getByText('检查并下载更新'));
+    await waitFor(() =>
+      expect(toaster.toast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '已是最新版本' }),
+      ),
+    );
+    expect(screen.getByText(/当前已是最新版本/)).toBeInTheDocument();
+  });
+
+  it('checks for updates automatically when settings opens', async () => {
+    checkPluginUpdateMock.mockResolvedValueOnce({
+      status: 'downloaded',
+      current: '1.0.0-zh-cn.36',
+      version: '1.0.0-zh-cn.37',
+      path: '/home/deck/Downloads/UmeYc-Portal.zip',
+    });
+    const state = createState(ViewMode.Sidebar);
+    vi.mocked(useGlobalState).mockReturnValue([state, vi.fn(), {}] as never);
+    render(<Settings />);
+    await waitFor(() => expect(checkPluginUpdateMock).toHaveBeenCalledTimes(1), {
+      timeout: 2000,
+    });
+    await waitFor(() =>
+      expect(toaster.toast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '更新已下载' }),
+      ),
+    );
+    expect(localStorage.getItem(UPDATE_CHECK_AT_KEY)).not.toBeNull();
+  });
+
+  it('skips the automatic check for an hour after a previous check', async () => {
+    localStorage.setItem(UPDATE_CHECK_AT_KEY, String(Date.now()));
+    const state = createState(ViewMode.Sidebar);
+    vi.mocked(useGlobalState).mockReturnValue([state, vi.fn(), {}] as never);
+    render(<Settings />);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(checkPluginUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it('shows the backend error when a manual update check fails', async () => {
+    checkPluginUpdateMock.mockRejectedValueOnce(new Error('无法访问 GitHub'));
+    const state = createState(ViewMode.Sidebar);
+    vi.mocked(useGlobalState).mockReturnValue([state, vi.fn(), {}] as never);
+    render(<Settings />);
+    fireEvent.click(screen.getByText('检查并下载更新'));
+    await waitFor(() =>
+      expect(toaster.toast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '检查更新失败' }),
+      ),
+    );
   });
 });

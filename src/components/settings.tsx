@@ -6,12 +6,20 @@ import {
   Field,
   DialogButton,
 } from '@decky/ui';
-import { useState } from 'react';
+import { toaster } from '@decky/api';
+import { useEffect, useRef, useState } from 'react';
 
 import { ViewMode } from '../lib/util';
 import { historyLabel } from '../lib/url-history';
 import { OFFLINE_AUTO_KEY } from '../lib/offline';
 import { isLocalAppUrl } from '../lib/local-app';
+import {
+  checkPluginUpdate,
+  PendingUpdate,
+  UPDATE_CHECK_AT_KEY,
+  UPDATE_CHECK_INTERVAL_MS,
+  UPDATE_READY_KEY,
+} from '../lib/updates';
 import { useGlobalState } from '../hooks/global-state';
 
 export const Settings = () => {
@@ -22,6 +30,106 @@ export const Settings = () => {
   const [offlineAuto, setOfflineAuto] = useState(
     () => localStorage.getItem(OFFLINE_AUTO_KEY) !== 'off',
   );
+  const [updating, setUpdating] = useState(false);
+  const [updateNotice, setUpdateNotice] = useState(() => {
+    try {
+      const raw = localStorage.getItem(UPDATE_READY_KEY);
+      if (!raw) return '';
+      const pending = JSON.parse(raw) as PendingUpdate;
+      return pending.version && pending.path
+        ? `已下载 ${pending.version}：${pending.path}。请到 Decky 设置 → 从 ZIP 文件安装。`
+        : '';
+    } catch {
+      return '';
+    }
+  });
+  const updatingRef = useRef(false);
+  const mountedRef = useRef(true);
+  const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const runUpdateRef = useRef<(manual: boolean) => Promise<void>>(async () => undefined);
+
+  const runUpdate = async (manual: boolean) => {
+    if (manual && autoTimerRef.current) {
+      clearTimeout(autoTimerRef.current);
+      autoTimerRef.current = null;
+    }
+    if (updatingRef.current) return;
+    updatingRef.current = true;
+    if (mountedRef.current) setUpdating(true);
+    if (manual) {
+      toaster.toast({
+        title: '正在检查更新',
+        body: '若发现新版本，会把 ZIP 下载到 Downloads。',
+      });
+    }
+    try {
+      const result = await checkPluginUpdate();
+      if (!mountedRef.current) return;
+      if (result.status === 'downloaded' || result.status === 'ready') {
+        const version = result.version || '新版本';
+        const path = result.path || '/home/deck/Downloads/UmeYc-Portal.zip';
+        localStorage.setItem(UPDATE_READY_KEY, JSON.stringify({ version, path }));
+        setUpdateNotice(
+          `已下载 ${version}：${path}。请到 Decky 设置 → 从 ZIP 文件安装。`,
+        );
+        if (manual || result.status === 'downloaded') {
+          toaster.toast({
+            title: result.status === 'downloaded' ? '更新已下载' : '更新包已就绪',
+            body: `${version} 已保存在 Downloads；请到 Decky 设置安装 ZIP。`,
+          });
+        }
+      } else {
+        localStorage.removeItem(UPDATE_READY_KEY);
+        setUpdateNotice(
+          `当前已是最新版本${result.current ? `（${result.current}）` : ''}。`,
+        );
+        if (manual) {
+          toaster.toast({ title: '已是最新版本', body: result.current || '' });
+        }
+      }
+    } catch (error) {
+      if (manual) {
+        toaster.toast({ title: '检查更新失败', body: String(error) });
+      }
+    } finally {
+      updatingRef.current = false;
+      if (mountedRef.current) setUpdating(false);
+    }
+  };
+  runUpdateRef.current = runUpdate;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let last = 0;
+    try {
+      last = Number(localStorage.getItem(UPDATE_CHECK_AT_KEY) || 0);
+    } catch {
+      last = 0;
+    }
+    if (Number.isFinite(last) && last > 0 && Date.now() - last < UPDATE_CHECK_INTERVAL_MS) {
+      return;
+    }
+    try {
+      localStorage.setItem(UPDATE_CHECK_AT_KEY, String(Date.now()));
+    } catch {
+      // Storage is optional; still allow the check.
+    }
+    const timer = setTimeout(() => {
+      autoTimerRef.current = null;
+      void runUpdateRef.current(false);
+    }, 400);
+    autoTimerRef.current = timer;
+    return () => {
+      clearTimeout(timer);
+      if (autoTimerRef.current === timer) autoTimerRef.current = null;
+    };
+  }, []);
 
   return (
     <>
@@ -92,6 +200,21 @@ export const Settings = () => {
             扫码传送
           </ButtonItem>
         </PanelSectionRow>
+        <PanelSectionRow>
+          <ButtonItem
+            layout="below"
+            bottomSeparator="standard"
+            disabled={updating}
+            onClick={() => void runUpdateRef.current(true)}
+          >
+            {updating ? '正在检查并下载更新…' : '检查并下载更新'}
+          </ButtonItem>
+        </PanelSectionRow>
+        {updateNotice && (
+          <PanelSectionRow>
+            <div style={{ fontSize: 12, opacity: 0.75 }}>{updateNotice}</div>
+          </PanelSectionRow>
+        )}
         <PanelSectionRow>
           <ToggleField
             label="扫码后自动离线保存"

@@ -45,6 +45,7 @@ export const getWebPageStateMock = vi.fn();
 export const startUrlInputMock = vi.fn();
 export const getUrlInputStatusMock = vi.fn();
 export const cancelUrlInputMock = vi.fn(async () => undefined);
+export const checkPluginUpdateMock = vi.fn();
 export const callable = vi.fn((route: string) => {
   const methods: Record<string, unknown> = {
     zoom_reader: zoomReaderMock,
@@ -75,6 +76,7 @@ export const callable = vi.fn((route: string) => {
     start_url_input: startUrlInputMock,
     get_url_input_status: getUrlInputStatusMock,
     cancel_url_input: cancelUrlInputMock,
+    check_plugin_update: checkPluginUpdateMock,
   };
   return methods[route];
 });

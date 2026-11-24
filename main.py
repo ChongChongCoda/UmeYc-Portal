@@ -28,6 +28,7 @@ from local_library import LocalLibrary
 from offline_server import OfflineServer
 from offline_store import OfflineLibrary
 from storage_migration import StorageMigration, plan_migration
+from update_checker import UpdateError, check_and_download
 from web_capture import CaptureError, PageCapture, SaveJob, inject_search
 from web_scroll import WebScroller
 
@@ -571,3 +572,9 @@ class Plugin:
             if self._phone is not None and self._phone.session_id == session_id:
                 await asyncio.to_thread(self._phone.close)
                 self._phone = None
+
+    async def check_plugin_update(self):
+        try:
+            return await asyncio.to_thread(check_and_download)
+        except UpdateError as error:
+            raise ValueError(str(error)) from error
