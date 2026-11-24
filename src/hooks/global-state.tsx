@@ -15,6 +15,8 @@ export interface State {
   controlBar: boolean;
   sidebarVideoSpace?: boolean;
   rightStickFullscreen?: boolean;
+  /** Settings toggle: request the mobile layout for web pages. */
+  mobileWeb?: boolean;
   activePanel?: 'url' | 'phone' | 'files' | 'mapsearch';
   pageTitle?: string;
   pageTitleUrl?: string;

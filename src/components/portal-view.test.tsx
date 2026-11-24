@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { Router } from '@decky/ui';
 import {
   prepareLocalFileMock,
@@ -128,6 +128,23 @@ describe('PortalView and PortalViewOuter', () => {
     render(<PortalView />);
 
     await waitFor(() => expect(setWebMobileModeMock).toHaveBeenCalledWith(true));
+  });
+
+  it('hides the web zoom controls while the mobile layout is active', () => {
+    const tree = qamTree();
+    Object.assign(tree.m_Root.m_element.ownerDocument.defaultView.document, {
+      querySelector: (selector: string) => (selector === '[data-umeyc-title]' ? {} : null),
+    });
+    getGamepadNavigationTrees.mockReturnValue([tree]);
+    vi.mocked(useGlobalState).mockReturnValue([
+      { ...createState(ViewMode.Sidebar), mobileWeb: true },
+    ] as never);
+
+    render(<PortalView />);
+
+    for (const label of ['缩小', '默认', '放大']) {
+      expect(screen.queryByRole('button', { name: label })).toBeNull();
+    }
   });
 
   it('shows the reader while the Portal plugin page is open', () => {

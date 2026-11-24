@@ -35,10 +35,12 @@ const ReaderButtons = ({
   controllerIndex,
   path,
   fullscreen,
+  zoomDisabled = false,
 }: {
   controllerIndex: number;
   path?: string;
   fullscreen: boolean;
+  zoomDisabled?: boolean;
 }) => {
   const buttons = useButtonFeed!(controllerIndex);
   // Keys held while opening/changing the reader must be released first.
@@ -58,6 +60,9 @@ const ReaderButtons = ({
     });
     const index = edges.findIndex(Boolean);
     if (index < 0 || inFlight.current || (index === 3 && (path || !fullscreen))) return;
+    // The mobile layout already fits the reader and its media queries break
+    // under CSS zoom; only the fullscreen shortcut stays available there.
+    if (!path && zoomDisabled && index !== 3) return;
     const page = path ? undefined : webPage();
     if (!path && !page) return;
     // Local atlas pages reflow under page zoom; they have their own pinch and
@@ -81,7 +86,7 @@ const ReaderButtons = ({
       .finally(() => {
         inFlight.current = false;
       });
-  }, [smaller, larger, reset, full, path, fullscreen]);
+  }, [smaller, larger, reset, full, path, fullscreen, zoomDisabled]);
   return null;
 };
 
@@ -163,9 +168,11 @@ const NativeReaderInput = ({
 export const ReaderInput = ({
   path,
   fullscreen = false,
+  zoomDisabled = false,
 }: {
   path?: string;
   fullscreen?: boolean;
+  zoomDisabled?: boolean;
 }) => {
   const [controllerIndex, setControllerIndex] = useState(getActiveControllerIndex);
   useEffect(() => {
@@ -183,6 +190,7 @@ export const ReaderInput = ({
           controllerIndex={controllerIndex}
           path={path}
           fullscreen={fullscreen}
+          zoomDisabled={zoomDisabled}
         />
       )}
     </>

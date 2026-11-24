@@ -206,6 +206,27 @@ describe('right stick reader input', () => {
     unmount();
   });
 
+  it('ignores zoom buttons on a mobile page but keeps the fullscreen shortcut', async () => {
+    Object.assign(window, {
+      portal: {
+        URL: 'https://m.example/',
+        Title: '手机版',
+        GetBrowser: () => ({ GetBounds: () => ({ width: 506, height: 534 }) }),
+      },
+    });
+    const { rerender, unmount } = render(<ReaderInput zoomDisabled />);
+    for (const button of ['bLeftBumper', 'bRightBumper', 'bLeftStickClick']) {
+      useButtonsMock.mockReturnValue({ [button]: true });
+      await act(async () => rerender(<ReaderInput zoomDisabled />));
+      rerender(<ReaderInput zoomDisabled />);
+      useButtonsMock.mockReturnValue({ [button]: false });
+      rerender(<ReaderInput zoomDisabled />);
+    }
+    expect(zoomWebPageMock).not.toHaveBeenCalled();
+    expect(zoomReaderMock).not.toHaveBeenCalled();
+    unmount();
+  });
+
   it('requires release after opening or changing controller, and ignores presses while pending', async () => {
     useButtonsMock.mockReturnValue({ bLeftBumper: true });
     const { rerender, unmount } = render(<ReaderInput path="/tmp/guide.JPG" />);

@@ -10,6 +10,7 @@ import { State, GlobalContext } from './hooks/global-state';
 import { getPersistedPortalState, PORTAL_STORAGE_KEY } from './lib/storage';
 import { isLoopbackUrl } from './lib/local-app';
 import { rememberUrl } from './lib/url-history';
+import { isMobileWebEnabled } from './lib/web-mobile';
 
 export default definePlugin(() => {
   const defaultState: State = {
@@ -23,6 +24,7 @@ export default definePlugin(() => {
     controlBar: false,
     sidebarVideoSpace: false,
     rightStickFullscreen: false,
+    mobileWeb: isMobileWebEnabled(),
   };
 
   const restored = getPersistedPortalState(localStorage);

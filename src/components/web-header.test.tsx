@@ -51,6 +51,22 @@ describe('web page header', () => {
     }
   });
 
+  it('hides the zoom controls when the mobile layout is active', () => {
+    render(
+      <WebHeader
+        title="手机版"
+        getUrl={() => 'https://m.example/'}
+        x={0}
+        y={0}
+        width={506}
+        zoomEnabled={false}
+      />,
+    );
+    for (const label of ['缩小', '默认', '放大']) {
+      expect(screen.queryByRole('button', { name: label })).toBeNull();
+    }
+  });
+
   it('resolves the current redirected URL on each press and releases the busy state', async () => {
     let url = 'https://guide.example/one';
     render(<WebHeader title="Guide" getUrl={() => url} x={0} y={0} width={506} />);

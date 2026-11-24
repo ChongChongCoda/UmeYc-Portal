@@ -16,6 +16,7 @@ export const WebHeader = ({
   y,
   width,
   onSearch,
+  zoomEnabled = true,
 }: {
   title: string;
   getUrl: () => string;
@@ -24,6 +25,7 @@ export const WebHeader = ({
   y: number;
   width: number;
   onSearch?: () => void;
+  zoomEnabled?: boolean;
 }) => {
   const [pending, setPending] = useState(false);
   const zoom = async (action: ZoomAction) => {
@@ -97,6 +99,7 @@ export const WebHeader = ({
         </button>
       )}
       {!onSearch &&
+        zoomEnabled &&
         (
           [
             ['smaller', '缩小'],

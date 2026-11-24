@@ -260,6 +260,7 @@ export const Settings = () => {
             onChange={(checked) => {
               setMobileWeb(checked);
               setMobileWebEnabled(checked);
+              setGlobalState((state) => ({ ...state, mobileWeb: checked }));
               void setWebMobileMode(checked).catch((error: unknown) =>
                 toaster.toast({ title: '切换手机版失败', body: String(error) }),
               );

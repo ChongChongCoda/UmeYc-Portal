@@ -233,6 +233,10 @@ class WebScroller:
         self._validate_url(url)
         if action not in {"smaller", "default", "larger"}:
             raise ValueError("Invalid zoom action")
+        if self._mobile:
+            # CSS zoom reflows the mobile media queries and the pinch reset
+            # destroys the viewport scale; the mobile layout already fits.
+            raise ValueError("手机版网页不支持缩放，请在设置中关闭手机版")
         return await self._run(self._zoom(url, action, title))
 
     async def _zoom(self, url, action, title=""):

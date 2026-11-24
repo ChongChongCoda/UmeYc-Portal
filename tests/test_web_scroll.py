@@ -212,6 +212,12 @@ class WebScrollTests(unittest.IsolatedAsyncioTestCase):
                       [c["method"] for c in calls])
         self.assertIn("Page.reload", [c["method"] for c in calls][-1:])
 
+    async def test_mobile_mode_refuses_page_zoom(self):
+        await self.scroller.set_mobile_mode(True)
+        with self.assertRaises(ValueError):
+            await self.scroller.zoom("https://guide.example/", "smaller")
+        self.assertEqual(self._calls(), [])
+
     async def test_invalid_zoom_action_cannot_evaluate_script(self):
         with self.assertRaises(ValueError):
             await self.scroller.zoom("https://guide.example/", "script injection")

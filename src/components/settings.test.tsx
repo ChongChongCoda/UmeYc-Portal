@@ -115,7 +115,8 @@ describe('Settings', () => {
 
   it('persists and applies the mobile web toggle', async () => {
     const state = createState(ViewMode.Sidebar);
-    vi.mocked(useGlobalState).mockReturnValue([state, vi.fn(), {}] as never);
+    const setState = vi.fn();
+    vi.mocked(useGlobalState).mockReturnValue([state, setState, {}] as never);
 
     render(<Settings />);
     const toggle = screen.getByLabelText('手机版网页');
@@ -123,6 +124,8 @@ describe('Settings', () => {
 
     expect(localStorage.getItem(MOBILE_WEB_KEY)).toBe('on');
     await waitFor(() => expect(setWebMobileModeMock).toHaveBeenLastCalledWith(true));
+    const update = setState.mock.calls[0][0] as (current: typeof state) => typeof state;
+    expect(update(state)).toMatchObject({ mobileWeb: true });
 
     fireEvent.click(toggle);
     expect(localStorage.getItem(MOBILE_WEB_KEY)).toBeNull();

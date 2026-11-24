@@ -40,6 +40,7 @@ interface BrowserProps {
   playbackSpace?: boolean;
   suppressPlayback?: boolean;
   pageTitle?: string;
+  zoomEnabled?: boolean;
 }
 
 interface BrowserHandle {
@@ -132,6 +133,7 @@ const Browser = ({
   playbackSpace,
   suppressPlayback,
   pageTitle,
+  zoomEnabled,
 }: BrowserProps) => {
   const [, , stateContext] = useGlobalState();
   const web = /^https?:\/\//i.test(url);
@@ -357,6 +359,7 @@ const Browser = ({
                   })
               : undefined
           }
+          zoomEnabled={zoomEnabled}
         />
       )}
     </>
@@ -512,7 +515,16 @@ export const PortalView = () => {
     pageTitle: nativeTitle,
   } = useDeckComponentBounds();
   const [
-    { url, visible, sidebarVideoSpace, rightStickFullscreen, activePanel, pageTitle, pageTitleUrl },
+    {
+      url,
+      visible,
+      sidebarVideoSpace,
+      rightStickFullscreen,
+      activePanel,
+      pageTitle,
+      pageTitleUrl,
+      mobileWeb,
+    },
     setGlobalState,
   ] = useGlobalState();
   const [offlineCapture, setOfflineCapture] = useState(isOfflineCaptureActive);
@@ -609,6 +621,7 @@ export const PortalView = () => {
           playbackSpace={sidebarVideoSpace === true && /^https?:\/\//i.test(url)}
           suppressPlayback={dropdownOpen || !!activePanel || steamBlockingUI}
           pageTitle={pageTitleUrl === url ? pageTitle || nativeTitle : nativeTitle}
+          zoomEnabled={mobileWeb !== true}
         />
       )}
       {readerVisible && (
@@ -616,6 +629,7 @@ export const PortalView = () => {
           key={url}
           path={localPath ?? undefined}
           fullscreen={rightStickFullscreen === true && /^https?:\/\//i.test(url)}
+          zoomDisabled={mobileWeb === true}
         />
       )}
       {Panel && (
