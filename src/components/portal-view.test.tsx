@@ -96,6 +96,19 @@ describe('PortalView and PortalViewOuter', () => {
     getGamepadNavigationTrees.mockReturnValue([]);
   });
 
+  it('destroys a browser view left behind by a previous plugin instance', () => {
+    const staleDestroy = vi.fn();
+    (window as unknown as { portal?: { Destroy: () => void } }).portal = {
+      Destroy: staleDestroy,
+    };
+    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
+
+    render(<PortalView />);
+
+    expect(staleDestroy).toHaveBeenCalledTimes(1);
+    expect(createBrowserView).toHaveBeenCalledTimes(1);
+  });
+
   it('returns null from outer component when closed', () => {
     vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Closed)] as never);
 

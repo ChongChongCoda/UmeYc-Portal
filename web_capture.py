@@ -44,6 +44,15 @@ def _route(address):
         return None
 
 
+def _is_web_page(page):
+    """True for the Portal's own web view, excluding Steam and loopback pages."""
+    parsed = urlsplit(page.get("url", ""))
+    return (
+        parsed.scheme in {"http", "https"}
+        and parsed.hostname not in {"steamloopback.host", "127.0.0.1", "localhost"}
+    )
+
+
 def _matching_pages(pages, url):
     pages = [
         page
@@ -54,7 +63,16 @@ def _matching_pages(pages, url):
     if exact:
         return exact
     route = _route(url)
-    return [page for page in pages if route and _route(page.get("url", "")) == route]
+    matches = [
+        page for page in pages if route and _route(page.get("url", "")) == route
+    ]
+    if matches:
+        return matches
+    # A QR transfer sends the share link while the browser follows a redirect,
+    # so neither the URL nor the route matches. The plugin owns a single web
+    # BrowserView: accept it only when exactly one non-Steam page exists.
+    web_pages = [page for page in pages if _is_web_page(page)]
+    return web_pages if len(web_pages) == 1 else []
 
 
 class CDPClient:

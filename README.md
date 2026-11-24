@@ -4,7 +4,7 @@
 
 > **接手这个项目（新电脑解压后）**
 >
-> 当前版本 `1.0.0-zh-cn.42`。对 Claude Code 说：**先读 README.md，再按里面的顺序接手这个项目。**
+> 当前版本 `1.0.0-zh-cn.43`。对 Claude Code 说：**先读 README.md，再按里面的顺序接手这个项目。**
 >
 > 阅读顺序：
 > 1. 本文件「功能 / 安装」：快速了解插件能力；
@@ -12,7 +12,7 @@
 > 3. [CLAUDE.md](CLAUDE.md)：代码架构、状态管理和开发约定；
 > 4. 按需读 `docs/OFFLINE_CAPTURE_VERIFICATION.md`（离线抓取）和 `docs/LOCAL_ATLAS.md`（地图册）。
 >
-> 新电脑先装 Node.js ≥ 22、Python ≥ 3.9，然后在项目根执行 `corepack pnpm@9.15.9 install --frozen-lockfile`。`out/UmeYc-Portal.zip` 是可直接安装的 .42 构建；完整 git 历史在 `.git` 中。
+> 新电脑先装 Node.js ≥ 22、Python ≥ 3.9，然后在项目根执行 `corepack pnpm@9.15.9 install --frozen-lockfile`。`out/UmeYc-Portal.zip` 是可直接安装的 .43 构建；完整 git 历史在 `.git` 中。
 
 [English / 上游说明](README.en.md) · [实机验证记录](docs/LOCAL_FILES_VERIFICATION.md)
 
@@ -45,7 +45,7 @@
 - **全屏视频摇杆控制**：视频全屏时右摇杆左右快退/快进、上下提高/降低视频音量；退出全屏后恢复网页滚动。使用网站方向键快捷键，B 站同时支持原生全屏与网页全屏；持续推动约每 250 毫秒重复一次，斜推采用幅度较大的方向。
 - **随侧栏播放/暂停**：网页侧栏模式可选自动发送空格，展开后继续、收起前暂停；默认关闭。
 
-当前版本：`1.0.0-zh-cn.42`。基于官方稳定标签 `v0.1.1`，保留上游提交历史和 BSD-3-Clause 许可证。
+当前版本：`1.0.0-zh-cn.43`。基于官方稳定标签 `v0.1.1`，保留上游提交历史和 BSD-3-Clause 许可证。
 
 ## 使用
 

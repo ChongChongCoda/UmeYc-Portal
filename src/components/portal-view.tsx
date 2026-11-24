@@ -96,6 +96,24 @@ const BrowserComposition = () => {
   return null;
 };
 
+// The BrowserView lives in Steam's main window, not in the plugin's React
+// tree. Track the live instance so plugin teardown destroys it explicitly
+// instead of leaving an uncloseable view above the game.
+let activeView: BrowserViewHandle | null = null;
+
+export const destroyPortalBrowserView = (): void => {
+  const view = activeView;
+  activeView = null;
+  if (!view) return;
+  try {
+    view.Destroy();
+  } catch {
+    // Steam may have destroyed the view already.
+  }
+  const holder = window as unknown as { portal?: BrowserViewHandle };
+  if (holder.portal === view) delete holder.portal;
+};
+
 const Browser = ({
   url,
   visible,
@@ -120,10 +138,23 @@ const Browser = ({
       return null;
     }
 
+    // A previous plugin instance (hot reload or reinstall) can leave its view
+    // registered in Steam's window. Destroy it before creating the new one so
+    // only the current plugin owns a view.
+    const stale = (window as unknown as { portal?: BrowserViewHandle }).portal;
+    if (stale) {
+      try {
+        stale.Destroy();
+      } catch {
+        // Already destroyed.
+      }
+    }
+
     const view = root.CreateBrowserView('portal');
     const browser = view.GetBrowser();
 
     (window as unknown as { portal?: BrowserViewHandle }).portal = view;
+    activeView = view;
 
     return {
       view,
@@ -295,7 +326,7 @@ const Browser = ({
   }, [handles, x, y, width, height, preserveHiddenBounds, visible, web]);
 
   useEffect(() => {
-    return () => handles?.view.Destroy();
+    return () => destroyPortalBrowserView();
   }, [handles]);
 
   // Unmount the request entirely when hidden. Requesting Hidden (0) would also

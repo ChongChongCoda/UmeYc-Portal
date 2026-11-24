@@ -12,6 +12,7 @@ vi.mock('@decky/ui', () => ({
 
 vi.mock('./components/portal-view', () => ({
   PortalViewOuter: () => <div>Portal View Outer</div>,
+  destroyPortalBrowserView: vi.fn(),
 }));
 
 vi.mock('./components/settings', () => ({
@@ -37,12 +38,14 @@ describe('plugin entrypoint', () => {
   it('registers and deregisters global components', async () => {
     const { default: plugin } = await import('./index');
     const { routerHook } = await import('./__mocks__/decky-api');
+    const { destroyPortalBrowserView } = await import('./components/portal-view');
 
     expect(plugin.name).toBe('UmeYc-Portal');
     expect(routerHook.addGlobalComponent).toHaveBeenCalledWith('Portal', expect.any(Function));
 
     (plugin as unknown as { onDismount: () => void }).onDismount();
 
+    expect(destroyPortalBrowserView).toHaveBeenCalled();
     expect(routerHook.removeGlobalComponent).toHaveBeenCalledWith('Portal');
   });
 

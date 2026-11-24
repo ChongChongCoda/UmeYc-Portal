@@ -3,7 +3,7 @@ import { StateManager } from 'cotton-box';
 import { quickAccessMenuClasses } from '@decky/ui';
 import { definePlugin, routerHook } from '@decky/api';
 
-import { PortalViewOuter } from './components/portal-view';
+import { destroyPortalBrowserView, PortalViewOuter } from './components/portal-view';
 import { Settings } from './components/settings';
 import { Position, ViewMode } from './lib/util';
 import { State, GlobalContext } from './hooks/global-state';
@@ -81,6 +81,9 @@ export default definePlugin(() => {
       </GlobalContext.Provider>
     ),
     onDismount() {
+      // Unmounting through the router hook is not guaranteed to run React
+      // cleanups (uninstall, reload, crash). Destroy the Steam-side view now.
+      destroyPortalBrowserView();
       routerHook.removeGlobalComponent('Portal');
     },
   };

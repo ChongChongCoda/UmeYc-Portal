@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from main import Plugin
-from web_capture import CaptureCancelled, SaveJob, _link_pages
+from web_capture import CaptureCancelled, SaveJob, _link_pages, _matching_pages
 
 
 class FakeCapture:
@@ -57,6 +57,56 @@ class SaveJobTests(unittest.IsolatedAsyncioTestCase):
         job.cancel()
         await job.run()
         self.assertEqual(job.snapshot()['status'], 'cancelled')
+
+
+class PageMatchingTests(unittest.TestCase):
+    @staticmethod
+    def page(url, title=''):
+        return {
+            'type': 'page',
+            'url': url,
+            'title': title,
+            'webSocketDebuggerUrl': f'ws://127.0.0.1:8080/devtools/page/{abs(hash(url))}',
+        }
+
+    def test_exact_url_wins_over_other_pages(self):
+        wanted = self.page('https://share.example/x')
+        other = self.page('https://guide.example/final')
+        self.assertEqual(_matching_pages([other, wanted], 'https://share.example/x'), [wanted])
+
+    def test_same_route_ignores_query_and_fragment(self):
+        page = self.page('https://guide.example/article?from=share#top')
+        self.assertEqual(
+            _matching_pages([page], 'https://guide.example/article?utm=qr'),
+            [page],
+        )
+
+    def test_redirected_share_link_resolves_the_sole_web_page(self):
+        steam = self.page('https://steamloopback.host/index.html')
+        guide = self.page('https://www.xiaoheihe.cn/app/bbs/post/196297922')
+        self.assertEqual(
+            _matching_pages([steam, guide], 'https://api.xiaoheihe.cn/share/abc'),
+            [guide],
+        )
+
+    def test_loopback_pages_do_not_mask_a_redirect(self):
+        offline = self.page('http://127.0.0.1:8137/collection/index.html')
+        self.assertEqual(
+            _matching_pages([offline], 'https://share.example/x'),
+            [],
+        )
+
+    def test_multiple_web_pages_stay_ambiguous(self):
+        first = self.page('https://guide.example/a')
+        second = self.page('https://guide.example/b')
+        self.assertEqual(
+            _matching_pages([first, second], 'https://share.example/x'),
+            [],
+        )
+
+    def test_targets_without_a_debugger_socket_are_ignored(self):
+        target = {'type': 'page', 'url': 'https://share.example/x'}
+        self.assertEqual(_matching_pages([target], 'https://share.example/x'), [])
 
 
 class LinkSelectionTests(unittest.TestCase):
