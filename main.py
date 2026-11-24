@@ -531,21 +531,31 @@ class Plugin:
                 raise ValueError("File has not been selected")
         self._server.motion(selected, x, y)
 
-    async def start_url_input(self, directory: str = ""):
+    async def start_url_input(self, directory: str = "", mode: str = "url"):
+        if mode not in {"url", "search"}:
+            raise ValueError("不支持的扫码输入类型")
         async with self._phone_lock:
             if self._phone is not None:
                 await asyncio.to_thread(self._phone.close)
                 self._phone = None
             try:
-                destination = upload_destination(directory)
-                self._phone = PhoneInputSession(lan_address(), upload_directory=destination)
+                destination = upload_destination(directory) if mode == "url" else None
+                self._phone = PhoneInputSession(
+                    lan_address(),
+                    upload_directory=destination,
+                    mode=mode,
+                )
             except OSError as error:
                 raise ValueError("无法打开扫码输入，请检查网络后重试") from error
-            picker_directory = destination
-            while not picker_directory.is_dir():
-                picker_directory = picker_directory.parent
-            return {"session_id": self._phone.session_id, "url": self._phone.url, "expires_in": 300,
-                    "upload_directory": str(destination), "upload_picker_directory": str(picker_directory)}
+            result = {"session_id": self._phone.session_id, "url": self._phone.url,
+                      "expires_in": 300, "mode": mode}
+            if destination is not None:
+                picker_directory = destination
+                while not picker_directory.is_dir():
+                    picker_directory = picker_directory.parent
+                result.update({"upload_directory": str(destination),
+                               "upload_picker_directory": str(picker_directory)})
+            return result
 
     async def get_url_input_status(self, session_id: str):
         session = self._phone

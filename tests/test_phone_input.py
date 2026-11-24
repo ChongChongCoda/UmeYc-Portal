@@ -9,7 +9,7 @@ from urllib.parse import urlencode, quote
 from urllib.request import Request, urlopen
 
 from main import Plugin
-from phone_input import PhoneInputSession, normalize_url
+from phone_input import PhoneInputSession, normalize_search, normalize_url
 
 
 class PhoneInputTests(unittest.IsolatedAsyncioTestCase):
@@ -30,6 +30,72 @@ class PhoneInputTests(unittest.IsolatedAsyncioTestCase):
     def post(self, url, value, headers=None):
         return urlopen(Request(url, data=urlencode({'url': value}).encode(),
                                headers=headers or {}), timeout=3)
+
+    def post_text(self, url, value, headers=None):
+        return urlopen(Request(url, data=urlencode({'text': value}).encode(),
+                               headers=headers or {}), timeout=3)
+
+    async def test_search_mode_serves_phone_keyboard_form_and_returns_text(self):
+        session = await self.plugin.start_url_input(mode='search')
+        self.assertEqual(session['mode'], 'search')
+        self.assertNotIn('upload_directory', session)
+        self.assertEqual(
+            (await self.plugin.get_url_input_status(session['session_id']))['status'], 'waiting')
+        with urlopen(session['url']) as response:
+            page = response.read().decode()
+        self.assertIn('地图搜索', page)
+        self.assertIn('name="text"', page)
+        self.assertNotIn('upload.js', page)
+        with self.assertRaises(HTTPError) as caught:
+            urlopen(session['url'] + '/upload.js')
+        self.assertEqual(caught.exception.code, 404)
+        with self.post_text(session['url'], '  钥匙  ',
+                            {'Origin': session['url'].rsplit('/', 1)[0]}) as response:
+            self.assertIn('搜索内容已发送', response.read().decode())
+        result = await self.plugin.get_url_input_status(session['session_id'])
+        self.assertEqual(result, {'status': 'received', 'kind': 'search', 'text': '钥匙'})
+        self.assertEqual(
+            await self.plugin.get_url_input_status(session['session_id']), result)
+        with self.assertRaises((URLError, ConnectionError, socket.timeout)):
+            urlopen(session['url'], timeout=1)
+
+    async def test_search_mode_rejects_unsafe_values_and_other_fields(self):
+        session = await self.plugin.start_url_input(mode='search')
+        for data, headers, code in [
+            (urlencode({'text': ''}).encode(), {}, 400),
+            (urlencode({'text': ' '}).encode(), {}, 400),
+            (urlencode({'text': 'x' * 201}).encode(), {}, 400),
+            (urlencode({'url': 'https://example.com'}).encode(), {}, 400),
+            (urlencode({'text': '钥匙'}).encode(), {'Content-Type': 'application/json'}, 415),
+        ]:
+            with self.subTest(code=code), self.assertRaises(HTTPError) as caught:
+                urlopen(Request(session['url'], data=data, headers=headers), timeout=3)
+            self.assertEqual(caught.exception.code, code)
+        with self.assertRaises(HTTPError) as caught:
+            urlopen(Request(session['url'] + '?upload=1&filename=a.png',
+                            data=b'\x89PNG\r\n\x1a\n'), timeout=3)
+        self.assertEqual(caught.exception.code, 400)
+        self.assertEqual(
+            (await self.plugin.get_url_input_status(session['session_id']))['status'], 'waiting')
+        with self.post_text(session['url'], '钥匙'):
+            pass
+        self.assertEqual(
+            (await self.plugin.get_url_input_status(session['session_id']))['status'], 'received')
+
+    async def test_search_session_accepts_only_one_submission(self):
+        session = await self.plugin.start_url_input(mode='search')
+        with self.post_text(session['url'], '钥匙'):
+            pass
+        with self.assertRaises(HTTPError) as caught:
+            self.post_text(session['url'], '知识')
+        self.assertEqual(caught.exception.code, 409)
+        result = await self.plugin.get_url_input_status(session['session_id'])
+        self.assertEqual(result['text'], '钥匙')
+
+    async def test_rejects_unknown_input_mode(self):
+        with self.assertRaisesRegex(ValueError, '扫码输入类型'):
+            await self.plugin.start_url_input(mode='video')
+        self.assertIsNone(self.plugin._phone)
 
     async def test_form_submit_receive_and_port_closes(self):
         session = await self.plugin.start_url_input()
@@ -180,3 +246,10 @@ class PhoneInputExpiryTests(unittest.TestCase):
         for value in [None, 'https://example.com:bad/', 'https://example.com:99999/', 'https://example.com\\@evil.example', 'data:text/html,test']:
             with self.subTest(value=value), self.assertRaises(ValueError):
                 normalize_url(value)
+
+    def test_normalizes_search_text(self):
+        self.assertEqual(normalize_search('  钥匙  '), '钥匙')
+        self.assertEqual(normalize_search('x' * 200), 'x' * 200)
+        for value in [None, '', '   ', 'x' * 201, '钥匙\n知识', 42]:
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                normalize_search(value)

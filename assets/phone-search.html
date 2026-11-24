@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="same-origin">
+<title>UmeYc-Portal · 地图搜索</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 48px 20px; background: #171a21; color: #fff; font: 16px/1.6 system-ui, sans-serif; }
+  main { max-width: 480px; margin: auto; }
+  h1 { font-size: 26px; margin: 0 0 10px; }
+  p { color: #bcc6d4; }
+  label { display: block; margin-bottom: 8px; }
+  input { display: block; width: 100%; padding: 14px; border: 1px solid #58667a; border-radius: 8px; background: #252b35; color: #fff; font: inherit; }
+  input:focus { outline: 2px solid #80cfff; }
+  button { width: 100%; margin-top: 16px; padding: 14px; border: 0; border-radius: 8px; background: #1a9fff; color: #fff; font: inherit; font-weight: 600; }
+  #message { color: #80cfff; }
+  small { display: block; margin-top: 24px; color: #9aa8ba; }
+</style>
+<main>
+  <h1>地图搜索</h1>
+  <p>在手机上输入要查找的物品名称、说明、密码、点位或区域。发送后会写入 Steam Deck 上打开的地图或物品页。</p>
+  <p id="message" role="status">{{MESSAGE}}</p>
+  <section id="forms" style="display: {{FORM_DISPLAY}}">
+    <form method="post">
+      <label for="text">搜索内容</label>
+      <input id="text" name="text" type="search" enterkeyhint="send" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="200" placeholder="例如：钥匙、知识、三叉戟" required>
+      <button type="submit">发送搜索</button>
+    </form>
+  </section>
+  <small>请保持 Deck 上的搜索窗口打开。二维码 5 分钟内有效，每次发送一条搜索内容。</small>
+</main>
+</html>

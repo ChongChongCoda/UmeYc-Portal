@@ -60,11 +60,24 @@ def normalize_url(value):
     return value
 
 
+def normalize_search(value):
+    if not isinstance(value, str):
+        raise ValueError("请输入搜索内容")
+    value = value.strip()
+    if not value or len(value) > 200 or any(ord(c) < 32 for c in value):
+        raise ValueError("请输入 1～200 个字符的搜索内容")
+    return value
+
+
 class PhoneInputSession:
-    def __init__(self, address, timeout=300, upload_directory=None):
+    def __init__(self, address, timeout=300, upload_directory=None, mode="url"):
+        if mode not in {"url", "search"}:
+            raise ValueError("不支持的扫码输入类型")
         self.session_id = secrets.token_urlsafe(32)
         self.expires_at = time.monotonic() + timeout
+        self.mode = mode
         self._url = None
+        self._text = None
         self.upload_directory = upload_directory
         self._receiving = False
         self._closed = False
@@ -85,6 +98,8 @@ class PhoneInputSession:
 
     def status(self):
         with self._lock:
+            if self._text is not None:
+                return {"status": "received", "kind": "search", "text": self._text}
             if self._url is not None:
                 return {"status": "received", "url": self._url}
             if self._closed or time.monotonic() >= self.expires_at:
@@ -92,6 +107,8 @@ class PhoneInputSession:
             return {"status": "uploading" if self._receiving else "waiting"}
 
     def submit(self, value):
+        if self.mode != "url":
+            raise ValueError("此二维码仅用于搜索")
         value = normalize_url(value)
         with self._lock:
             if self._closed or time.monotonic() >= self.expires_at:
@@ -100,7 +117,20 @@ class PhoneInputSession:
                 raise FileExistsError()
             self._url = value
 
+    def submit_search(self, value):
+        if self.mode != "search":
+            raise ValueError("此二维码仅用于发送网址或图片")
+        text = normalize_search(value)
+        with self._lock:
+            if self._closed or time.monotonic() >= self.expires_at:
+                raise TimeoutError()
+            if self._text is not None:
+                raise FileExistsError()
+            self._text = text
+
     def upload(self, filename, stream, length):
+        if self.mode != "url":
+            raise ValueError("此二维码仅用于搜索，不能上传图片")
         with self._lock:
             self._check_active()
             if self._url is not None or self._receiving:
@@ -154,12 +184,17 @@ class PhoneInputHandler(BaseHTTPRequestHandler):
         return True
 
     def _page(self, message="", done=False, status=200):
-        template = Path(__file__).with_name("assets").joinpath("phone-input.html")
+        session = self.server.session
+        name = "phone-search.html" if session.mode == "search" else "phone-input.html"
+        template = Path(__file__).with_name("assets").joinpath(name)
         content = template.read_text(encoding="utf-8").replace(
             "{{MESSAGE}}", html.escape(message)
-        ).replace("{{FORM_DISPLAY}}", "none" if done else "block").replace(
-            "{{UPLOAD_SCRIPT}}", f"/{self.server.session.session_id}/upload.js"
-        ).encode("utf-8")
+        ).replace("{{FORM_DISPLAY}}", "none" if done else "block")
+        if session.mode == "url":
+            content = content.replace(
+                "{{UPLOAD_SCRIPT}}", f"/{session.session_id}/upload.js"
+            )
+        content = content.encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(content)))
@@ -177,8 +212,12 @@ class PhoneInputHandler(BaseHTTPRequestHandler):
         script = urlsplit(self.path).path.endswith("/upload.js")
         if not self._authorized(script=script):
             return
-        status = self.server.session.status()["status"]
+        session = self.server.session
+        status = session.status()["status"]
         if script:
+            if session.mode != "url":
+                self.send_error(404)
+                return
             if status == "expired":
                 self.send_error(410)
                 return
@@ -211,6 +250,9 @@ class PhoneInputHandler(BaseHTTPRequestHandler):
             self.send_error(400)
             return
         if query.get("upload") == ["1"]:
+            if session.mode != "url":
+                self.send_error(400)
+                return
             self._upload(query)
             return
         if self.headers.get("Content-Type", "").split(";", 1)[0] != "application/x-www-form-urlencoded":
@@ -221,10 +263,16 @@ class PhoneInputHandler(BaseHTTPRequestHandler):
             if not 0 < length <= 32768:
                 raise ValueError("网址太长，请重新输入")
             fields = parse_qs(self.rfile.read(length).decode("utf-8"), max_num_fields=4)
-            values = fields.get("url", [])
-            if len(values) != 1:
-                raise ValueError("请输入一个网址")
-            session.submit(values[0])
+            if session.mode == "search":
+                values = fields.get("text", [])
+                if len(values) != 1:
+                    raise ValueError("请输入搜索内容")
+                session.submit_search(values[0])
+            else:
+                values = fields.get("url", [])
+                if len(values) != 1:
+                    raise ValueError("请输入一个网址")
+                session.submit(values[0])
         except (ValueError, UnicodeError) as error:
             self._page(str(error), status=400)
         except TimeoutError:
@@ -232,7 +280,11 @@ class PhoneInputHandler(BaseHTTPRequestHandler):
         except FileExistsError:
             self._page("此二维码已使用，请在 Deck 上重新打开扫码输入。", done=True, status=409)
         else:
-            self._page("网址已发送，请回到 Deck 查看。", done=True)
+            self._page(
+                "搜索内容已发送，请回到 Deck 查看。" if session.mode == "search"
+                else "网址已发送，请回到 Deck 查看。",
+                done=True,
+            )
 
     def _upload(self, query):
         try:

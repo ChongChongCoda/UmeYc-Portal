@@ -1,22 +1,29 @@
 import { callable } from '@decky/api';
 
+export type UrlInputMode = 'url' | 'search';
+
 export interface UrlInputSession {
   session_id: string;
   url: string;
   expires_in: number;
+  mode?: UrlInputMode;
   upload_directory?: string;
   upload_picker_directory?: string;
 }
 
 export type UrlInputStatus =
   | { status: 'waiting' | 'uploading' | 'expired' }
-  | { status: 'received'; url: string };
+  | { status: 'received'; url: string }
+  | { status: 'received'; kind: 'search'; text: string };
 
 export const UPLOAD_DIRECTORY_KEY = 'portal.uploadDirectory';
 export const getUploadDirectory = callable<[directory: string], { directory: string }>(
   'get_upload_directory',
 );
-export const startUrlInput = callable<[directory: string], UrlInputSession>('start_url_input');
+export const startUrlInput = callable<
+  [directory: string, mode?: UrlInputMode],
+  UrlInputSession
+>('start_url_input');
 export const getUrlInputStatus = callable<[sessionId: string], UrlInputStatus>(
   'get_url_input_status',
 );

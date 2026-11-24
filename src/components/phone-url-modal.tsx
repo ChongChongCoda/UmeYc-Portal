@@ -62,7 +62,7 @@ export const PhoneUrlModal = (props: ModalRootProps) => {
       try {
         const result = await getUrlInputStatus(sessionId!);
         if (disposed) return;
-        if (result.status === 'received') {
+        if (result.status === 'received' && 'url' in result) {
           if (
             /^https?:\/\//i.test(result.url) &&
             localStorage.getItem(OFFLINE_AUTO_KEY) !== 'off'
