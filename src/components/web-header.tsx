@@ -16,6 +16,7 @@ export const WebHeader = ({
   y,
   width,
   onSearch,
+  onCollapse,
 }: {
   title: string;
   getUrl: () => string;
@@ -24,6 +25,7 @@ export const WebHeader = ({
   y: number;
   width: number;
   onSearch?: () => void;
+  onCollapse?: () => void;
 }) => {
   const [pending, setPending] = useState(false);
   const zoom = async (action: ZoomAction) => {
@@ -141,6 +143,31 @@ export const WebHeader = ({
             </svg>
           </button>
         ))}
+      {onCollapse && (
+        <button
+          type="button"
+          aria-label="收起网页"
+          title="收起网页，保留页面"
+          onPointerDown={(event) => event.preventDefault()}
+          onClick={onCollapse}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 48,
+            height: 28,
+            padding: '0 8px',
+            flexShrink: 0,
+            border: 0,
+            borderRadius: 4,
+            background: '#435268',
+            color: '#fff',
+            fontSize: 13,
+          }}
+        >
+          收起
+        </button>
+      )}
     </header>
   );
 };

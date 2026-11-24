@@ -1,6 +1,6 @@
 # UmeYc-Portal 交接文档
 
-> 更新时间：2026-11-24 · 当前版本：`1.0.0-zh-cn.43`（最新提交见 `git log`）
+> 更新时间：2026-11-24 · 当前版本：`1.0.0-zh-cn.44`（最新提交见 `git log`）
 >
 > **给接手的 Claude：** 先读仓库根的 `README.md`，按它顶部的阅读顺序接手；本文件是第 2 步，也是实际进度、待办、构建/发布流程和踩坑记录的权威来源。用户使用简体中文交流。
 >
@@ -15,7 +15,7 @@
 - 上游 fork：<https://github.com/xiaochaom/UmeYc-Portal>（又来自 `ajustinjames/decky-portal`，稳定基线 `v0.1.1`）
 - 本地主分支：`main`；远程 `origin` 指向上面的 fork，`upstream` 指向上游。
 - 发布方式：GitHub Releases，标签格式 `fork-1.0.0-zh-cn.NN`；资产固定名为 `UmeYc-Portal.zip`。
-- 最新 Release：<https://github.com/ChongChongCoda/UmeYc-Portal/releases/tag/fork-1.0.0-zh-cn.43>
+- 最新 Release：<https://github.com/ChongChongCoda/UmeYc-Portal/releases/tag/fork-1.0.0-zh-cn.44>
 - 直链：`https://github.com/ChongChongCoda/UmeYc-Portal/releases/latest/download/UmeYc-Portal.zip`
 - 交接包内已带构建产物：`out/UmeYc-Portal.zip`（633,573 字节，与 .42 Release 资产一致）。
 
@@ -43,6 +43,7 @@
 14. **随侧栏播放/暂停**：可选，收起前暂停、展开后继续。
 15. **离线保存跳转匹配（.43）**：扫码发送短链或分享链、页面跳转后网址变化时，若 CEF 中只有一个非 Steam 网页，按该页面保存，不再报「等待网页加载超时」。
 16. **窗口主动清理（.43）**：卸载/重载插件时主动 `Destroy()` 阅读器 BrowserView，并在创建新视图前销毁上一插件实例残留的 `window.portal`，避免关不掉的残留网页窗口。
+17. **随时收起/展开（.44）**：网页标题栏「收起」隐藏阅读器但保留 BrowserView（不重新加载、不销毁）；左上角「攻略」悬浮按钮一键展开，且 `manualVisible` 允许在 Decky 侧栏关闭时保持显示。状态 `collapsed` / `manualVisible` 只在本次运行有效。
 
 ### 2.2 最近提交
 
@@ -64,25 +65,27 @@ a313341 Add smartphone-style touch gestures to the local atlas
 - 前端：`pnpm test:coverage` **184 个测试全部通过**，覆盖率达标（statements 83%+，branches 75%+）。
 - Python：滚动、抓取、MHTML、离线存储、更新检查、迁移等测试通过；Windows 上少数 Linux-only 用例（`os.geteuid`）会报错，属环境差异，不是回归。
 - Deck 实机已确认：自动更新检查成功（.39）、Steam 键盘地图搜索通过（.40）、.42 可安装。
-- **实机反馈（.42）**：扫码后离线保存报「等待网页加载超时」；插件卸载后网页窗口残留且无法关闭。两项已在 .43 修复，待在 .43 上复验（见第 3 节）。
-- **尚未实机确认**：.41 小黑盒一级链接全流程；.42 的缩放修复和断网自动打开离线副本；.43 的两项修复。
+- **实机反馈（.42）**：扫码后离线保存报「等待网页加载超时」；插件卸载后网页窗口残留且无法关闭。两项已在 .43 修复；.44 按用户要求新增「收起/展开」。
+- **尚未实机确认**：.41 小黑盒一级链接全流程；.42 的缩放修复和断网自动打开离线副本；.43 的两项修复；.44 的收起/展开交互（见第 3 节）。
 
 ---
 
 ## 3. 下一步：实机验证（最重要）
 
-### 3.1 验证 .43
+### 3.1 验证 .44
 
-1. 安装 .43：设置页「检查并下载更新」→ Decky「从 ZIP 文件安装插件」→ 选 `/home/deck/Downloads/UmeYc-Portal.zip`。
-2. 联网扫码发送一篇小黑盒文章（可用短链/分享链），等待出现「离线保存完成」，不再出现「离线保存失败：等待网页加载超时」。
-3. 点网页右上角缩小/默认/放大：**不应再出现 Python 异常**。
-4. 关闭 Wi‑Fi，从「网页」历史点击同一个网址：应提示「已打开离线副本」并显示本地页面。
-5. 在 Portal 打开时卸载/重载插件：**阅读器窗口应立即消失**；若仍残留，记录是否有 `window.portal` 及 Decky 版本。
-6. 也可从「本地文件 → 离线网页」直接打开；删除集合时应连同 `pages/` 一起删除。
+1. 安装 .44：设置页「检查并下载更新」→ Decky「从 ZIP 文件安装插件」→ 选 `/home/deck/Downloads/UmeYc-Portal.zip`。
+2. **收起/展开**：网页标题栏点「收起」→ 阅读器隐藏、左上角出现「攻略」按钮；关闭 Decky 侧栏后再点「攻略」→ 阅读器应重新显示且页面不重新加载；再点标题栏「收起」应再次隐藏。
+3. 联网扫码发送一篇小黑盒文章（可用短链/分享链），等待出现「离线保存完成」，不再出现「离线保存失败：等待网页加载超时」。
+4. 点网页右上角缩小/默认/放大：**不应再出现 Python 异常**。
+5. 关闭 Wi‑Fi，从「网页」历史点击同一个网址：应提示「已打开离线副本」并显示本地页面。
+6. 在 Portal 打开时卸载/重载插件：**阅读器窗口应立即消失**；若仍残留，记录是否有 `window.portal` 及 Decky 版本。
+7. 也可从「本地文件 → 离线网页」直接打开；删除集合时应连同 `pages/` 一起删除。
 
-如果第 2 步仍失败：记录提示原文、扫码发送的原始网址、页面实际停止的 URL、`/home/deck/homebrew/logs/UmeYc-Portal/<时间>.log`。
-如果第 4 步仍失败：确认是从「网页」历史点击（不是旧标签）、断网后 `navigator.onLine` 是否为 false、历史 URL 与保存时的最终 URL 是否一致（短链跳转可能导致不一致）。必要时放宽 `findOfflineCollection` 的匹配或记录保存时原始 URL 的映射。
-如果第 5 步仍失败：说明残留视图不是本插件创建或 onDismount 未执行；重启 Steam 可清掉，并记录 Decky 版本。
+如果第 2 步仍失败：记录「攻略」按钮是否可见、点击后侧栏状态、页面是否重载。
+如果第 3 步仍失败：记录提示原文、扫码发送的原始网址、页面实际停止的 URL、`/home/deck/homebrew/logs/UmeYc-Portal/<时间>.log`。
+如果第 5 步仍失败：确认是从「网页」历史点击（不是旧标签）、断网后 `navigator.onLine` 是否为 false、历史 URL 与保存时的最终 URL 是否一致（短链跳转可能导致不一致）。必要时放宽 `findOfflineCollection` 的匹配或记录保存时原始 URL 的映射。
+如果第 6 步仍失败：说明残留视图不是本插件创建或 onDismount 未执行；重启 Steam 可清掉，并记录 Decky 版本。
 
 ### 3.2 验证 .41 小黑盒一级链接
 
@@ -151,7 +154,7 @@ Windows 上 `tests.test_local_files` / `test_local_library` / `test_phone_input`
 
 ### 5.1 版本号
 
-- `package.json` 的 `version`：如 `1.0.0-zh-cn.43`。
+- `package.json` 的 `version`：如 `1.0.0-zh-cn.44`。
 - `README.md` 的「当前版本」同步更新。
 - `plugin.json` **没有** version 字段，不要加。
 - `scripts/package.py` 使用 `plugin.json` 的 `name` 作为 ZIP 名。
@@ -169,16 +172,17 @@ python scripts/package.py
 # 2. 提交 + tag
 git add -A
 git commit -m "…"
-git tag fork-1.0.0-zh-cn.43
+git tag fork-1.0.0-zh-cn.44
 
-# 3. 推送（旧机需要 https_proxy）
+# 3. 推送（旧机需要 https_proxy；新机直连可用）
 git push origin main
-git push origin fork-1.0.0-zh-cn.43
+git push origin fork-1.0.0-zh-cn.44
 
 # 4. 创建 Release（注意 --repo，默认可能解析到上游）
-gh release create fork-1.0.0-zh-cn.43 out/UmeYc-Portal.zip \
+#    新机 gh 不在 PATH：export PATH="/c/Program Files/GitHub CLI:$PATH"
+gh release create fork-1.0.0-zh-cn.44 out/UmeYc-Portal.zip \
   --repo ChongChongCoda/UmeYc-Portal \
-  --title "UmeYc-Portal 1.0.0-zh-cn.43" --latest \
+  --title "UmeYc-Portal 1.0.0-zh-cn.44" --latest \
   --notes "更新说明…"
 ```
 
@@ -273,6 +277,7 @@ curl -s https://api.github.com/repos/ChongChongCoda/UmeYc-Portal/releases/latest
 - `.41` 小黑盒一级文章链接离线抓取（`/app/bbs/link|post/`，最多 30，子页不递归）。
 - `.42` 缩放页面识别回退；断网从历史自动打开离线副本；完成提示/文档补充。
 - `.43` 实机反馈两项修复：扫码短链跳转导致离线保存匹配超时（`_matching_pages` 增加「唯一非 Steam 网页」回退）；插件卸载/重载后阅读器窗口残留（onDismount 主动 Destroy + 清理上一实例的 `window.portal`）。
+- `.44` 新增随时收起/展开：标题栏「收起」+ 左上角「攻略」悬浮按钮；收起保留 BrowserView 不重建；`manualVisible` 支持侧栏关闭时继续显示。
 
 ---
 

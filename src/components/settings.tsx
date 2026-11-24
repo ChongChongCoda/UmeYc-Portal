@@ -289,6 +289,8 @@ export const Settings = () => {
                 ...state,
                 activePanel: undefined,
                 visible: true,
+                collapsed: false,
+                manualVisible: false,
                 viewMode: state.viewMode === ViewMode.Closed ? ViewMode.Sidebar : ViewMode.Closed,
               }))
             }

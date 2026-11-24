@@ -34,6 +34,7 @@ interface BrowserProps {
   playbackSpace?: boolean;
   suppressPlayback?: boolean;
   pageTitle?: string;
+  onCollapse?: () => void;
 }
 
 interface BrowserHandle {
@@ -126,6 +127,7 @@ const Browser = ({
   playbackSpace,
   suppressPlayback,
   pageTitle,
+  onCollapse,
 }: BrowserProps) => {
   const [, , stateContext] = useGlobalState();
   const web = /^https?:\/\//i.test(url);
@@ -351,6 +353,7 @@ const Browser = ({
                   })
               : undefined
           }
+          onCollapse={onCollapse}
         />
       )}
     </>
@@ -503,7 +506,17 @@ export const PortalView = () => {
     pageTitle: nativeTitle,
   } = useDeckComponentBounds();
   const [
-    { url, visible, sidebarVideoSpace, rightStickFullscreen, activePanel, pageTitle, pageTitleUrl },
+    {
+      url,
+      visible,
+      sidebarVideoSpace,
+      rightStickFullscreen,
+      activePanel,
+      pageTitle,
+      pageTitleUrl,
+      collapsed,
+      manualVisible,
+    },
     setGlobalState,
   ] = useGlobalState();
   const [offlineCapture, setOfflineCapture] = useState(isOfflineCaptureActive);
@@ -517,8 +530,9 @@ export const PortalView = () => {
     !activePanel &&
     !dropdownOpen &&
     !steamBlockingUI &&
-    qamOpen &&
-    !offlineCapture;
+    (qamOpen || manualVisible === true) &&
+    !offlineCapture &&
+    !collapsed;
   const closePanel = () =>
     setGlobalState((state) => ({ ...state, activePanel: undefined, visible: true }));
   const Panel = activePanel
@@ -595,6 +609,15 @@ export const PortalView = () => {
           playbackSpace={sidebarVideoSpace === true && /^https?:\/\//i.test(url)}
           suppressPlayback={dropdownOpen || !!activePanel || steamBlockingUI}
           pageTitle={pageTitleUrl === url ? pageTitle || nativeTitle : nativeTitle}
+          onCollapse={() =>
+            setGlobalState((state) => ({
+              ...state,
+              collapsed: true,
+              manualVisible: false,
+              viewMode: ViewMode.Closed,
+              visible: true,
+            }))
+          }
         />
       )}
       {readerVisible && (
@@ -626,12 +649,64 @@ export const PortalView = () => {
   );
 };
 
-export const PortalViewOuter = () => {
-  const [{ viewMode, activePanel }] = useGlobalState();
+const CollapsedPortalButton = () => {
+  const [, setGlobalState] = useGlobalState();
+  return (
+    <button
+      type="button"
+      aria-label="展开攻略"
+      title="展开攻略"
+      onPointerDown={(event) => event.preventDefault()}
+      onClick={() =>
+        setGlobalState((state) => ({
+          ...state,
+          collapsed: false,
+          manualVisible: true,
+          viewMode: ViewMode.Sidebar,
+          visible: true,
+        }))
+      }
+      style={{
+        position: 'fixed',
+        zIndex: 8000,
+        left: 8,
+        top: 8,
+        width: 56,
+        height: 44,
+        padding: 0,
+        border: '1px solid rgba(255, 255, 255, 0.35)',
+        borderRadius: 22,
+        background: 'rgba(20, 24, 31, 0.78)',
+        color: '#fff',
+        font: '13px sans-serif',
+        pointerEvents: 'auto',
+        cursor: 'pointer',
+      }}
+    >
+      攻略
+    </button>
+  );
+};
 
-  if (viewMode === ViewMode.Closed && !activePanel) {
+export const PortalViewOuter = () => {
+  const [{ viewMode, activePanel, collapsed }, setGlobalState] = useGlobalState();
+
+  // Any other surface that opens the reader (QAM toggle, URL/file panel)
+  // clears the collapsed state; only the collapse button sets it.
+  useEffect(() => {
+    if (viewMode !== ViewMode.Closed && collapsed) {
+      setGlobalState((state) => ({ ...state, collapsed: false }));
+    }
+  }, [viewMode, collapsed, setGlobalState]);
+
+  if (viewMode === ViewMode.Closed && !activePanel && !collapsed) {
     return null;
   }
 
-  return <PortalView />;
+  return (
+    <>
+      <PortalView />
+      {collapsed && <CollapsedPortalButton />}
+    </>
+  );
 };

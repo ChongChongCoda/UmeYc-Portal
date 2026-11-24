@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Router } from '@decky/ui';
 import {
   prepareLocalFileMock,
@@ -107,6 +107,77 @@ describe('PortalView and PortalViewOuter', () => {
 
     expect(staleDestroy).toHaveBeenCalledTimes(1);
     expect(createBrowserView).toHaveBeenCalledTimes(1);
+  });
+
+  it('collapses the header into a floating restore button without destroying the page', () => {
+    const state = { ...createState(ViewMode.Closed), collapsed: true };
+    const setGlobalState = vi.fn();
+    vi.mocked(useGlobalState).mockReturnValue([state, setGlobalState] as never);
+
+    render(<PortalViewOuter />);
+
+    expect(createBrowserView).toHaveBeenCalledTimes(1);
+    const restore = screen.getByRole('button', { name: '展开攻略' });
+    fireEvent.pointerDown(restore);
+    fireEvent.click(restore);
+    expect(setGlobalState).toHaveBeenCalled();
+    const update = setGlobalState.mock.calls[0][0] as (current: typeof state) => typeof state;
+    expect(update(state)).toMatchObject({
+      collapsed: false,
+      manualVisible: true,
+      viewMode: ViewMode.Sidebar,
+      visible: true,
+    });
+  });
+
+  it('expands from the floating button without the side menu', () => {
+    vi.mocked(getOpenSideMenu).mockReturnValue(0);
+    vi.mocked(useGlobalState).mockReturnValue([
+      { ...createState(ViewMode.Sidebar), manualVisible: true },
+    ] as never);
+
+    const { queryByTestId } = render(<PortalView />);
+
+    expect(queryByTestId('reader-input')).toBeTruthy();
+    expect(setVisible).toHaveBeenLastCalledWith(true);
+  });
+
+  it('leaves the collapsed state when the reader opens from another surface', () => {
+    const state = { ...createState(ViewMode.Sidebar), collapsed: true };
+    const setGlobalState = vi.fn();
+    vi.mocked(useGlobalState).mockReturnValue([state, setGlobalState] as never);
+
+    render(<PortalViewOuter />);
+
+    expect(setGlobalState).toHaveBeenCalled();
+    const update = setGlobalState.mock.calls[0][0] as (current: typeof state) => typeof state;
+    expect(update(state)).toMatchObject({ collapsed: false });
+  });
+
+  it('hides the reader but keeps its browser view while collapsed', () => {
+    const state = { ...createState(ViewMode.Closed), collapsed: true };
+    vi.mocked(useGlobalState).mockReturnValue([state] as never);
+
+    const { queryByTestId } = render(<PortalView />);
+
+    expect(queryByTestId('reader-input')).toBeNull();
+    expect(destroy).not.toHaveBeenCalled();
+  });
+
+  it('collapses from the web header', () => {
+    const state = createState(ViewMode.Sidebar);
+    const setGlobalState = vi.fn();
+    vi.mocked(useGlobalState).mockReturnValue([state, setGlobalState] as never);
+
+    render(<PortalView />);
+    fireEvent.click(screen.getByRole('button', { name: '收起网页' }));
+
+    const update = setGlobalState.mock.calls[0][0] as (current: typeof state) => typeof state;
+    expect(update(state)).toMatchObject({
+      collapsed: true,
+      manualVisible: false,
+      viewMode: ViewMode.Closed,
+    });
   });
 
   it('returns null from outer component when closed', () => {
@@ -699,7 +770,8 @@ describe('PortalView and PortalViewOuter', () => {
       expect(setBounds).toHaveBeenLastCalledWith(0, 34, 534, 500);
       expect(setVisible).toHaveBeenLastCalledWith(true);
       expect(container.querySelector('[data-testid="reader-input"]')).toBeTruthy();
-      expect(container.querySelectorAll('button')).toHaveLength(3);
+      // Zoom in/default/out plus the collapse action.
+      expect(container.querySelectorAll('button')).toHaveLength(4);
     },
   );
 

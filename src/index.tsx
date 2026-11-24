@@ -23,6 +23,7 @@ export default definePlugin(() => {
     controlBar: false,
     sidebarVideoSpace: false,
     rightStickFullscreen: false,
+    collapsed: false,
   };
 
   const restored = getPersistedPortalState(localStorage);
