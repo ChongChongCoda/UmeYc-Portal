@@ -9,8 +9,43 @@
   'use strict';
 
   const page = (location.pathname.split('/').pop() || '').toLowerCase();
-  if (page !== 'index.html' && page !== 'world.html') return;
   const world = page === 'world.html';
+  const mapPage = page === 'index.html' || world;
+
+  function hint(text) {
+    const node = document.createElement('div');
+    node.textContent = text;
+    node.style.cssText =
+      'position:fixed;left:50%;top:18%;transform:translate(-50%,-50%);z-index:2147483647;' +
+      'background:#20303f;color:#fff;padding:10px 16px;border-radius:8px;font:14px sans-serif;' +
+      'box-shadow:0 4px 16px rgba(0,0,0,.4)';
+    document.body.appendChild(node);
+    setTimeout(() => node.remove(), 1800);
+  }
+
+  function neutralizeSearchInputs() {
+    document
+      .querySelectorAll('#search, #query, input[type="search"]')
+      .forEach((input) => {
+        if (input.dataset.portalSearch === '1') return;
+        input.dataset.portalSearch = '1';
+        input.readOnly = true;
+        input.title = '请使用顶部「搜索」按钮';
+        input.addEventListener(
+          'pointerdown',
+          (event) => {
+            event.preventDefault();
+            hint('请使用顶部「搜索」按钮');
+          },
+          { capture: true },
+        );
+        input.addEventListener('focus', () => hint('请使用顶部「搜索」按钮'), {
+          capture: true,
+        });
+      });
+  }
+
+  neutralizeSearchInputs();
 
   const attach = () => {
     const canvas = document.getElementById('map');
@@ -184,6 +219,8 @@
     canvas.addEventListener('touchcancel', finish, { capture: true, passive: false });
   };
 
-  if (document.getElementById('map')) attach();
-  else document.addEventListener('DOMContentLoaded', attach, { once: true });
+  if (mapPage) {
+    if (document.getElementById('map')) attach();
+    else document.addEventListener('DOMContentLoaded', attach, { once: true });
+  }
 })();

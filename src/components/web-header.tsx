@@ -82,75 +82,65 @@ export const WebHeader = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: 32,
+            width: 60,
             height: 28,
-            padding: 4,
+            padding: '0 8px',
             flexShrink: 0,
             border: 0,
             borderRadius: 4,
-            background: '#435268',
+            background: '#2f6f8f',
             color: '#fff',
+            fontSize: 13,
           }}
         >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            aria-hidden="true"
-          >
-            <circle cx="11" cy="11" r="7" />
-            <path d="m20 20-3.5-3.5" />
-          </svg>
+          搜索
         </button>
       )}
-      {(
-        [
-          ['smaller', '缩小'],
-          ['default', '默认'],
-          ['larger', '放大'],
-        ] as const
-      ).map(([action, label]) => (
-        <button
-          key={action}
-          type="button"
-          aria-label={label}
-          title={label}
-          disabled={pending}
-          onPointerDown={(event) => event.preventDefault()}
-          onClick={() => void zoom(action)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 32,
-            height: 28,
-            padding: 4,
-            flexShrink: 0,
-            border: 0,
-            borderRadius: 4,
-            background: '#435268',
-            color: '#fff',
-          }}
-        >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
+      {!onSearch &&
+        (
+          [
+            ['smaller', '缩小'],
+            ['default', '默认'],
+            ['larger', '放大'],
+          ] as const
+        ).map(([action, label]) => (
+          <button
+            key={action}
+            type="button"
+            aria-label={label}
+            title={label}
+            disabled={pending}
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => void zoom(action)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 32,
+              height: 28,
+              padding: 4,
+              flexShrink: 0,
+              border: 0,
+              borderRadius: 4,
+              background: '#435268',
+              color: '#fff',
+            }}
           >
-            <path d={icons[action]} />
-          </svg>
-        </button>
-      ))}
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d={icons[action]} />
+            </svg>
+          </button>
+        ))}
     </header>
   );
 };

@@ -32,6 +32,25 @@ describe('web page header', () => {
     }
   });
 
+  it('offers a labeled search action and hides page zoom on atlas pages', () => {
+    const onSearch = vi.fn();
+    render(
+      <WebHeader
+        title="女王魔域"
+        getUrl={() => 'http://127.0.0.1:8137/app/token/index.html'}
+        x={0}
+        y={0}
+        width={506}
+        onSearch={onSearch}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '搜索地图' }));
+    expect(onSearch).toHaveBeenCalledOnce();
+    for (const label of ['缩小', '默认', '放大']) {
+      expect(screen.queryByRole('button', { name: label })).toBeNull();
+    }
+  });
+
   it('resolves the current redirected URL on each press and releases the busy state', async () => {
     let url = 'https://guide.example/one';
     render(<WebHeader title="Guide" getUrl={() => url} x={0} y={0} width={506} />);

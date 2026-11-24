@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { ViewMode } from '../lib/util';
 import { historyLabel } from '../lib/url-history';
 import { OFFLINE_AUTO_KEY } from '../lib/offline';
+import { isLocalAppUrl } from '../lib/local-app';
 import { useGlobalState } from '../hooks/global-state';
 
 export const Settings = () => {
@@ -71,6 +72,17 @@ export const Settings = () => {
             </DialogButton>
           </Field>
         </PanelSectionRow>
+        {isLocalAppUrl(url) && (
+          <PanelSectionRow>
+            <ButtonItem
+              layout="below"
+              bottomSeparator="standard"
+              onClick={() => setGlobalState((state) => ({ ...state, activePanel: 'mapsearch' }))}
+            >
+              地图搜索
+            </ButtonItem>
+          </PanelSectionRow>
+        )}
         <PanelSectionRow>
           <ButtonItem
             layout="below"

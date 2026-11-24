@@ -2,6 +2,7 @@ import { findModuleExport } from '@decky/ui';
 import { callable, toaster } from '@decky/api';
 import { useEffect, useRef, useState } from 'react';
 import { getActiveControllerIndex } from '../lib/controller';
+import { isLocalAppUrl } from '../lib/local-app';
 import type { ZoomAction } from './web-header';
 
 interface AxesState {
@@ -59,6 +60,9 @@ const ReaderButtons = ({
     if (index < 0 || inFlight.current || (index === 3 && (path || !fullscreen))) return;
     const page = path ? undefined : webPage();
     if (!path && !page) return;
+    // Local atlas pages reflow under page zoom; they have their own pinch and
+    // +/- controls, so leave L1/R1/L3/R3 alone there.
+    if (!path && page && isLocalAppUrl(page.url)) return;
     const action = (['smaller', 'larger', 'default'] as const)[index];
     inFlight.current = true;
     const command =
