@@ -1,5 +1,7 @@
 # Current State Audit
 
+> **已过时（2026-11-24）**：这是 fork 早期的能力审计，仅作历史参考。当前进度、待办和发布流程请看仓库根的 [`HANDOFF.md`](../HANDOFF.md)。
+
 > This document captures what the forked *Picture in Picture* plugin can do today, what works well, and where the gaps are.
 
 ---

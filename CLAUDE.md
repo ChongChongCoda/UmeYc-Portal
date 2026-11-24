@@ -2,11 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **接手本 fork 时先读 [`HANDOFF.md`](HANDOFF.md)。** 它记录了当前版本（`1.0.0-zh-cn.42`）、已实现功能、实机待验证项、构建/发布流程、已知坑和文件地图。下面是上游架构说明，其中 “Phase 0” 等阶段描述已经过时。
+
 ## Project Overview
 
 Decky Portal is a Steam Deck plugin (Decky Loader) that provides a floating in-game web browser (Picture-in-Picture). It lets users view websites like YouTube, Netflix, and Twitch in a popup window while gaming. Forked from [decky-pip](https://github.com/rossimo/decky-pip), now being overhauled into a full-featured browser companion.
 
-**Current phase:** Phase 0 (Repo Foundations) — establishing build/test infrastructure before feature work begins.
+**Current phase:** maintaining the Chinese fork (`ChongChongCoda/UmeYc-Portal`), latest release `fork-1.0.0-zh-cn.42`. Offline capture, local atlas, Steam keyboard search, auto-update download and offline-copy fallback are implemented; see `HANDOFF.md` for the live status and pending Deck verification.
 
 ## Commands
 
