@@ -119,7 +119,7 @@ class LocalAppServer(ThreadingHTTPServer):
                 while len(self._tokens) > MAX_GRANTS:
                     oldest = next(iter(self._tokens))
                     self._grants.pop(self._tokens.pop(oldest), None)
-        return f"{self.origin}/{token}/{entry}"
+        return f"{self.origin}/app/{token}/{entry}"
 
     def granted(self, token):
         with self._lock:
@@ -158,15 +158,15 @@ class LocalAppHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         parts = urlsplit(self.path).path.split("/")
-        if len(parts) < 3 or parts[0] != "":
+        if len(parts) < 4 or parts[0] != "" or parts[1] != "app":
             self.send_error(404)
             return
-        token = unquote(parts[1])
+        token = unquote(parts[2])
         root = self.server.granted(token)
         if root is None:
             self.send_error(404)
             return
-        relative = [unquote(part) for part in parts[2:] if part]
+        relative = [unquote(part) for part in parts[3:] if part]
         if any(
             part in {".", ".."} or "\\" in part or "\x00" in part or ":" in part
             for part in relative

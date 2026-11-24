@@ -24,6 +24,13 @@ export const openLocalApp = callable<[directory: string, entry: string], OpenedL
   'open_local_app',
 );
 
+export const searchLocalApp = callable<[url: string, query: string], { found: boolean }>(
+  'search_local_app',
+);
+
+export const isLocalAppUrl = (url: string): boolean =>
+  /^http:\/\/(?:127\.0\.0\.1|localhost):\d+\/app\//i.test(url);
+
 // Local preview, offline collection and local-app URLs all use loopback. They
 // contain session tokens and must never be persisted as page history.
 export const isLoopbackUrl = (url: string): boolean =>

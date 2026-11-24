@@ -15,7 +15,7 @@ export interface State {
   controlBar: boolean;
   sidebarVideoSpace?: boolean;
   rightStickFullscreen?: boolean;
-  activePanel?: 'url' | 'phone' | 'files';
+  activePanel?: 'url' | 'phone' | 'files' | 'mapsearch';
   pageTitle?: string;
   pageTitleUrl?: string;
 }

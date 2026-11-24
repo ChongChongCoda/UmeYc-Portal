@@ -28,7 +28,7 @@ from local_library import LocalLibrary
 from offline_server import OfflineServer
 from offline_store import OfflineLibrary
 from storage_migration import StorageMigration, plan_migration
-from web_capture import PageCapture, SaveJob
+from web_capture import CaptureError, PageCapture, SaveJob, inject_search
 from web_scroll import WebScroller
 
 
@@ -416,6 +416,14 @@ class Plugin:
         self._offline_save = job
         self._offline_save_task = asyncio.create_task(job.run())
         return {"started": True, "status": job.snapshot()}
+
+    async def search_local_app(self, url: str, query: str):
+        if not isinstance(query, str) or not query.strip() or len(query) > 200:
+            raise ValueError("请输入 1～200 个字符的搜索内容")
+        try:
+            return await inject_search(url, query.strip())
+        except CaptureError as error:
+            raise ValueError(str(error)) from error
 
     async def get_offline_save_status(self):
         job = self._offline_save

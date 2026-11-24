@@ -15,6 +15,7 @@ export const WebHeader = ({
   x,
   y,
   width,
+  onSearch,
 }: {
   title: string;
   getUrl: () => string;
@@ -22,6 +23,7 @@ export const WebHeader = ({
   x: number;
   y: number;
   width: number;
+  onSearch?: () => void;
 }) => {
   const [pending, setPending] = useState(false);
   const zoom = async (action: ZoomAction) => {
@@ -69,6 +71,42 @@ export const WebHeader = ({
       >
         {title || '正在加载…'}
       </span>
+      {onSearch && (
+        <button
+          type="button"
+          aria-label="搜索地图"
+          title="搜索地图"
+          onPointerDown={(event) => event.preventDefault()}
+          onClick={onSearch}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 32,
+            height: 28,
+            padding: 4,
+            flexShrink: 0,
+            border: 0,
+            borderRadius: 4,
+            background: '#435268',
+            color: '#fff',
+          }}
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
+        </button>
+      )}
       {(
         [
           ['smaller', '缩小'],

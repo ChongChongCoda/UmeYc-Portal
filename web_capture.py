@@ -351,6 +351,76 @@ class PageCapture:
         }
 
 
+SEARCH_EXPRESSION = """(() => {
+  const input = document.querySelector('#query, #search, input[type="search"]');
+  if (!input) return false;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+  setter.call(input, __QUERY__);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
+})()"""
+
+
+async def inject_search(url, query):
+    """Fill the map/items search box through CDP without opening the keyboard."""
+    if not isinstance(url, str) or not isinstance(query, str):
+        raise CaptureError("搜索参数无效")
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme != "http"
+        or parsed.hostname not in {"127.0.0.1", "localhost"}
+        or not parsed.path.startswith("/app/")
+    ):
+        raise CaptureError("只能搜索本地地图册页面")
+    from aiohttp import ClientError, ClientSession, ClientTimeout
+
+    session = ClientSession(timeout=ClientTimeout(total=None, sock_connect=5, sock_read=10))
+    socket = None
+    try:
+        page = None
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            try:
+                async with session.get(DEBUGGER_URL) as response:
+                    pages = await response.json()
+            except (ClientError, OSError, ValueError):
+                pages = []
+            matches = _matching_pages(pages, url)
+            if len(matches) == 1:
+                page = matches[0]
+                break
+            if len(matches) > 1:
+                raise CaptureError("无法唯一识别网页，请关闭重复页面后重试")
+            await asyncio.sleep(0.2)
+        if page is None:
+            raise CaptureError("地图页面尚未打开")
+        endpoint = urlsplit(page.get("webSocketDebuggerUrl", ""))
+        if (
+            endpoint.scheme != "ws"
+            or endpoint.hostname not in {"127.0.0.1", "localhost"}
+            or endpoint.port != 8080
+        ):
+            raise CaptureError("浏览器调试地址无效")
+        socket = await session.ws_connect(page["webSocketDebuggerUrl"])
+        client = CDPClient(socket)
+        await client.call("Runtime.enable")
+        expression = SEARCH_EXPRESSION.replace(
+            "__QUERY__", json.dumps(query, ensure_ascii=False)
+        )
+        value = await client.evaluate(expression)
+        if value is not True:
+            raise CaptureError("这个页面没有可用的搜索框")
+        return {"found": True}
+    finally:
+        if socket is not None:
+            try:
+                await socket.close()
+            except (ClientError, OSError):
+                pass
+        await session.close()
+
+
 class SaveJob:
     """One offline save request with a pollable status."""
 

@@ -641,13 +641,15 @@ export const LocalFilesModal = (props: ModalRootProps) => {
               >
                 {saveRoot || '自动选择（优先 SD 卡）'}
               </div>
-              <DialogButton
-                disabled={busy || migrating || loading}
-                onClick={() => setPickerMode('save')}
-                style={{ flex: '0 0 auto', minWidth: 0, whiteSpace: 'nowrap' }}
-              >
-                更换
-              </DialogButton>
+              <div style={{ flex: '0 0 72px' }}>
+                <DialogButton
+                  disabled={busy || migrating || loading}
+                  onClick={() => setPickerMode('save')}
+                  style={{ width: '100%', minWidth: 0, padding: '4px 2px', whiteSpace: 'nowrap' }}
+                >
+                  更换
+                </DialogButton>
+              </div>
             </Focusable>
           </div>
           {saveStatus && saveStatus.status === 'running' && (
@@ -676,46 +678,58 @@ export const LocalFilesModal = (props: ModalRootProps) => {
           )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ fontSize: 12, opacity: 0.7 }}>离线地图册</div>
-            <div
-              title={mapDirectory || '未选择'}
-              style={{
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                fontSize: 13,
-              }}
-            >
-              {mapDirectory || '未选择（先解压到 SD 卡）'}
-            </div>
-            <Focusable flow-children="row" style={{ display: 'flex', gap: 8 }}>
-              <DialogButton
-                disabled={busy || mapBusy}
-                onClick={() => setPickerMode('map')}
-                style={{ flex: '1 1 0', minWidth: 0 }}
+            <Focusable flow-children="row" style={{ display: 'flex', gap: 8, minWidth: 0 }}>
+              <div
+                title={mapDirectory || '未选择'}
+                style={{
+                  flex: '1 1 0',
+                  minWidth: 0,
+                  alignSelf: 'center',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  fontSize: 13,
+                }}
               >
-                选择地图册文件夹
-              </DialogButton>
+                {mapDirectory || '未选择（先解压到内置存储或 SD 卡）'}
+              </div>
               {mapDirectory && (
-                <DialogButton
-                  disabled={busy || mapBusy}
-                  onClick={clearMap}
-                  style={{ flex: '0 0 auto', minWidth: 0 }}
-                >
-                  清除
-                </DialogButton>
+                <div style={{ flex: '0 0 64px' }}>
+                  <DialogButton
+                    disabled={busy || mapBusy}
+                    onClick={clearMap}
+                    style={{ width: '100%', minWidth: 0, padding: '4px 2px', whiteSpace: 'nowrap' }}
+                  >
+                    清除
+                  </DialogButton>
+                </div>
               )}
             </Focusable>
+            <DialogButton
+              disabled={busy || mapBusy}
+              onClick={() => setPickerMode('map')}
+              style={{ width: '100%', minWidth: 0, padding: '8px 12px' }}
+            >
+              选择地图册文件夹
+            </DialogButton>
             {mapEntries.length > 0 && (
-              <Focusable flow-children="row" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Focusable flow-children="row" style={{ display: 'flex', gap: 8 }}>
                 {LOCAL_APP_PAGES.filter((page) => mapEntries.includes(page.entry)).map((page) => (
-                  <DialogButton
-                    key={page.entry}
-                    disabled={busy || mapBusy}
-                    onClick={() => void openMap(page.entry)}
-                    style={{ flex: '1 1 0', minWidth: 90 }}
-                  >
-                    {page.label}
-                  </DialogButton>
+                  <div key={page.entry} style={{ flex: '1 1 0', minWidth: 0 }}>
+                    <DialogButton
+                      disabled={busy || mapBusy}
+                      onClick={() => void openMap(page.entry)}
+                      style={{
+                        width: '100%',
+                        minWidth: 0,
+                        padding: '8px 4px',
+                        whiteSpace: 'nowrap',
+                        fontSize: 13,
+                      }}
+                    >
+                      {page.label}
+                    </DialogButton>
+                  </div>
                 ))}
               </Focusable>
             )}
@@ -741,27 +755,33 @@ export const LocalFilesModal = (props: ModalRootProps) => {
                 迁移到新位置；同名文件会自动编号，不会覆盖。也可以只更换位置，旧文件留在原处。
               </div>
               <Focusable flow-children="row" style={{ display: 'flex', gap: 8 }}>
-                <DialogButton
-                  disabled={busy}
-                  onClick={() => void beginMigration()}
-                  style={{ flex: '1 1 0', minWidth: 0 }}
-                >
-                  迁移并更换
-                </DialogButton>
-                <DialogButton
-                  disabled={busy}
-                  onClick={keepOldFiles}
-                  style={{ flex: '1 1 0', minWidth: 0 }}
-                >
-                  仅更换
-                </DialogButton>
-                <DialogButton
-                  disabled={busy}
-                  onClick={() => setMigrationPlan(null)}
-                  style={{ flex: '0 0 auto', minWidth: 0 }}
-                >
-                  取消
-                </DialogButton>
+                <div style={{ flex: '1 1 0', minWidth: 0 }}>
+                  <DialogButton
+                    disabled={busy}
+                    onClick={() => void beginMigration()}
+                    style={{ width: '100%', minWidth: 0, padding: '4px 2px' }}
+                  >
+                    迁移并更换
+                  </DialogButton>
+                </div>
+                <div style={{ flex: '1 1 0', minWidth: 0 }}>
+                  <DialogButton
+                    disabled={busy}
+                    onClick={keepOldFiles}
+                    style={{ width: '100%', minWidth: 0, padding: '4px 2px' }}
+                  >
+                    仅更换
+                  </DialogButton>
+                </div>
+                <div style={{ flex: '0 0 72px' }}>
+                  <DialogButton
+                    disabled={busy}
+                    onClick={() => setMigrationPlan(null)}
+                    style={{ width: '100%', minWidth: 0, padding: '4px 2px' }}
+                  >
+                    取消
+                  </DialogButton>
+                </div>
               </Focusable>
             </div>
           )}
@@ -867,20 +887,24 @@ export const LocalFilesModal = (props: ModalRootProps) => {
           )}
           {migrationError && <p role="alert">{migrationError}</p>}
           <Focusable flow-children="row" style={{ display: 'flex', gap: 8 }}>
-            <DialogButton
-              onClick={() => setPickerMode('browse')}
-              disabled={busy}
-              style={{ flex: '1 1 0', width: 0, minWidth: 0, whiteSpace: 'nowrap' }}
-            >
-              选择文件夹
-            </DialogButton>
-            <DialogButton
-              onClick={() => setRevision((value) => value + 1)}
-              disabled={busy || loading}
-              style={{ flex: '1 1 0', width: 0, minWidth: 0, whiteSpace: 'nowrap' }}
-            >
-              刷新
-            </DialogButton>
+            <div style={{ flex: '1 1 0', minWidth: 0 }}>
+              <DialogButton
+                onClick={() => setPickerMode('browse')}
+                disabled={busy}
+                style={{ width: '100%', minWidth: 0, whiteSpace: 'nowrap' }}
+              >
+                选择文件夹
+              </DialogButton>
+            </div>
+            <div style={{ flex: '1 1 0', minWidth: 0 }}>
+              <DialogButton
+                onClick={() => setRevision((value) => value + 1)}
+                disabled={busy || loading}
+                style={{ width: '100%', minWidth: 0, whiteSpace: 'nowrap' }}
+              >
+                刷新
+              </DialogButton>
+            </div>
           </Focusable>
           <div style={{ fontSize: 12, opacity: 0.7, overflowWrap: 'anywhere' }}>
             {listing?.directory || directory}

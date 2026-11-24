@@ -10,10 +10,11 @@ import { getOpenSideMenu, isSteamBlockingUI, isVirtualKeyboardShowing } from '..
 import { ReaderInput } from './reader-input';
 import { WebHeader, WEB_HEADER_HEIGHT } from './web-header';
 import { rememberPageTitle, rememberUrl, removeUrl } from '../lib/url-history';
-import { isLoopbackUrl } from '../lib/local-app';
+import { isLocalAppUrl, isLoopbackUrl } from '../lib/local-app';
 import { UrlModal } from './url-modal';
 import { PhoneUrlModal } from './phone-url-modal';
 import { LocalFilesModal } from './local-files-modal';
+import { MapSearchModal } from './map-search-modal';
 import { SCREEN_HEIGHT, SCREEN_WIDTH, ViewMode } from '../lib/util';
 
 interface BrowserProps {
@@ -282,6 +283,15 @@ const Browser = ({
           x={x}
           y={y}
           width={width}
+          onSearch={
+            isLocalAppUrl(url)
+              ? () =>
+                  stateContext.set({
+                    ...stateContext.get(),
+                    activePanel: 'mapsearch',
+                  })
+              : undefined
+          }
         />
       )}
     </>
@@ -442,7 +452,12 @@ export const PortalView = () => {
   const closePanel = () =>
     setGlobalState((state) => ({ ...state, activePanel: undefined, visible: true }));
   const Panel = activePanel
-    ? { url: UrlModal, phone: PhoneUrlModal, files: LocalFilesModal }[activePanel]
+    ? {
+        url: UrlModal,
+        phone: PhoneUrlModal,
+        files: LocalFilesModal,
+        mapsearch: MapSearchModal,
+      }[activePanel]
     : undefined;
   const localPath = (() => {
     try {

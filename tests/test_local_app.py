@@ -37,6 +37,7 @@ class LocalAppTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(info['directory'], str(self.app))
         self.assertEqual(info['entries'], ['index.html', 'world.html'])
         opened = await self.plugin.open_local_app(str(self.app), 'world.html')
+        self.assertIn('/app/', opened['url'])
         with urlopen(opened['url']) as response:
             page = response.read().decode()
             csp = response.headers['Content-Security-Policy']
@@ -97,6 +98,14 @@ class LocalAppTests(unittest.IsolatedAsyncioTestCase):
         info = await self.plugin.validate_local_app(str(outer))
         self.assertEqual(info['directory'], str(inner.resolve()))
         self.assertEqual(info['entries'], ['index.html'])
+
+    async def test_search_requires_a_local_app_url_and_query(self):
+        with self.assertRaises(ValueError):
+            await self.plugin.search_local_app('https://example.com/', 'x')
+        with self.assertRaises(ValueError):
+            await self.plugin.search_local_app(
+                'http://127.0.0.1:8137/app/token/index.html', '   '
+            )
 
     async def test_unload_stops_the_local_app_server(self):
         opened = await self.plugin.open_local_app(str(self.app), 'index.html')
