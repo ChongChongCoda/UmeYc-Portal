@@ -174,6 +174,10 @@ class PluginStorageMigrationTests(unittest.IsolatedAsyncioTestCase):
             def cancel(self):
                 pass
 
-        self.plugin._migration = RunningJob()
+        self.plugin._storage_migration = RunningJob()
         with self.assertRaises(ValueError):
             await self.plugin.start_storage_migration(str(self.old), str(self.new))
+
+    async def test_plugin_does_not_shadow_reserved_decky_hooks(self):
+        self.assertFalse(hasattr(self.plugin, '_migration'))
+        self.assertFalse(hasattr(self.plugin, '_uninstall'))

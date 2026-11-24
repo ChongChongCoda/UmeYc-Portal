@@ -284,8 +284,10 @@ class Plugin:
         self._offline = OfflineLibrary()
         self._offline_server = None
         self._offline_thread = None
-        self._migration = None
-        self._migration_lock = threading.Lock()
+        # Decky treats _migration/_uninstall as plugin hooks when present and
+        # would call them during startup; keep internal jobs on other names.
+        self._storage_migration = None
+        self._storage_migration_lock = threading.Lock()
         self._offline_save = None
         self._offline_save_task = None
         self._local_app_server = None
@@ -378,20 +380,20 @@ class Plugin:
         plan = await asyncio.to_thread(plan_migration, old, new)
         if plan["total"] == 0:
             return {"started": False, "plan": plan, "status": None}
-        with self._migration_lock:
-            if self._migration is not None and self._migration.snapshot()["status"] == "running":
+        with self._storage_migration_lock:
+            if self._storage_migration is not None and self._storage_migration.snapshot()["status"] == "running":
                 raise ValueError("已有迁移任务正在进行，请先等待或取消")
             job = await asyncio.to_thread(StorageMigration, old, new)
             job.start()
-            self._migration = job
+            self._storage_migration = job
         return {"started": True, "plan": plan, "status": job.snapshot()}
 
     async def get_storage_migration_status(self):
-        job = self._migration
+        job = self._storage_migration
         return job.snapshot() if job is not None else None
 
     async def cancel_storage_migration(self):
-        job = self._migration
+        job = self._storage_migration
         if job is None:
             return None
         job.cancel()
@@ -444,8 +446,8 @@ class Plugin:
         return {"url": url, "directory": info["directory"], "entries": info["entries"]}
 
     async def _unload(self):
-        if self._migration is not None:
-            self._migration.cancel()
+        if self._storage_migration is not None:
+            self._storage_migration.cancel()
         if self._offline_save is not None:
             self._offline_save.cancel()
         if self._offline_save_task is not None:
