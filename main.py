@@ -2,6 +2,7 @@
 
 import asyncio
 from collections import OrderedDict
+import faulthandler
 import html
 import json
 import math
@@ -9,11 +10,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import mimetypes
 import os
 from pathlib import Path
+import queue
 import secrets
 import shutil
+import socketserver
 import sys
 import threading
-import queue
+import time
 from urllib.parse import urlsplit
 
 # Decky loads main.py by filename rather than importing a plugin package.
@@ -29,6 +32,39 @@ from web_capture import PageCapture, SaveJob
 from web_scroll import WebScroller
 
 
+DIAGNOSTIC_ROOT = Path(os.environ.get("DECKY_USER_HOME", "/home/deck"))
+DIAGNOSTIC_FLAG = DIAGNOSTIC_ROOT / "umeyc-debug.flag"
+DIAGNOSTIC_LOG = DIAGNOSTIC_ROOT / "umeyc-backend-stack.txt"
+_diagnostics_started = False
+
+
+def _start_diagnostics():
+    """Dump all backend threads while a user-created flag file exists."""
+    global _diagnostics_started
+    if _diagnostics_started:
+        return
+    _diagnostics_started = True
+
+    def loop():
+        while True:
+            try:
+                if DIAGNOSTIC_FLAG.exists():
+                    with DIAGNOSTIC_LOG.open("a", encoding="utf-8") as handle:
+                        handle.write(
+                            f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n"
+                        )
+                        faulthandler.dump_traceback(file=handle, all_threads=True)
+                        handle.flush()
+            except Exception:  # noqa: BLE001 - diagnostics must never break the plugin
+                pass
+            time.sleep(10)
+
+    threading.Thread(target=loop, daemon=True, name="portal-diagnostics").start()
+
+
+_start_diagnostics()
+
+
 SUPPORTED_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg", ".avif", ".ico",
     ".pdf", ".html", ".htm", ".txt", ".md",
@@ -38,6 +74,13 @@ IMAGE_EXTENSIONS = SUPPORTED_EXTENSIONS - {".pdf", ".html", ".htm", ".txt", ".md
 
 class PreviewServer(ThreadingHTTPServer):
     daemon_threads = True
+
+    def server_bind(self):
+        # HTTPServer.server_bind performs a blocking reverse-DNS lookup.
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name = host
+        self.server_port = port
 
     def __init__(self):
         self.grants = OrderedDict()

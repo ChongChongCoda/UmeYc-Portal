@@ -8,11 +8,24 @@ from pathlib import Path
 import re
 import secrets
 import socket
+import socketserver
 import threading
 import time
 from urllib.parse import parse_qs, urlsplit
 
 from image_upload import MAX_IMAGE_BYTES, save_image
+
+
+class PhoneInputServer(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def server_bind(self):
+        # Binding to the LAN address makes HTTPServer perform a reverse-DNS
+        # lookup, which can block for a long time on VPN/hotspot networks.
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name = host
+        self.server_port = port
 
 
 def lan_address():
@@ -57,7 +70,7 @@ class PhoneInputSession:
         self._closed = False
         self._lock = threading.Lock()
         self._close_lock = threading.Lock()
-        self._server = ThreadingHTTPServer((address, 0), PhoneInputHandler)
+        self._server = PhoneInputServer((address, 0), PhoneInputHandler)
         self._server.daemon_threads = True
         self._server.session = self
         self.origin = f"http://{address}:{self._server.server_port}"

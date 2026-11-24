@@ -8,6 +8,7 @@ policy that forbids scripts and network access.
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import mimetypes
 import shutil
+import socketserver
 from urllib.parse import unquote, urlsplit
 
 
@@ -27,6 +28,12 @@ PAGE_POLICY = (
 
 class OfflineServer(ThreadingHTTPServer):
     daemon_threads = True
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name = host
+        self.server_port = port
 
     def __init__(self, library):
         self.library = library

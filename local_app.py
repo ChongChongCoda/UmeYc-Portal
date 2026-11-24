@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import secrets
 import shutil
+import socketserver
 import threading
 from urllib.parse import unquote, urlsplit
 
@@ -80,6 +81,12 @@ def validate_app(directory):
 
 class LocalAppServer(ThreadingHTTPServer):
     daemon_threads = True
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name = host
+        self.server_port = port
 
     def __init__(self):
         self._lock = threading.Lock()
