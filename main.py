@@ -504,6 +504,9 @@ class Plugin:
     async def zoom_web_page(self, url: str, action: str, title: str = ""):
         return await self._web_scroller.zoom(url, action, title)
 
+    async def set_web_mobile_mode(self, enabled: bool):
+        return await self._web_scroller.set_mobile_mode(enabled)
+
     async def send_web_space(self, url: str, title: str = ""):
         await self._web_scroller.space(url, title)
 

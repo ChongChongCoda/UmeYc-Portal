@@ -7,7 +7,8 @@ import { useGlobalState } from '../hooks/global-state';
 import { Position, ViewMode } from '../lib/util';
 import { rememberUrl, rememberPageTitle } from '../lib/url-history';
 import { UPDATE_CHECK_AT_KEY, UPDATE_READY_KEY } from '../lib/updates';
-import { checkPluginUpdateMock, toaster } from '../__mocks__/decky-api';
+import { checkPluginUpdateMock, setWebMobileModeMock, toaster } from '../__mocks__/decky-api';
+import { MOBILE_WEB_KEY } from '../lib/web-mobile';
 
 vi.mock('../hooks/global-state', () => ({
   useGlobalState: vi.fn(),
@@ -110,6 +111,22 @@ describe('Settings', () => {
       expect(screen.queryByLabelText(label)).toBeNull();
       expect(screen.queryByText(label)).toBeNull();
     }
+  });
+
+  it('persists and applies the mobile web toggle', async () => {
+    const state = createState(ViewMode.Sidebar);
+    vi.mocked(useGlobalState).mockReturnValue([state, vi.fn(), {}] as never);
+
+    render(<Settings />);
+    const toggle = screen.getByLabelText('手机版网页');
+    fireEvent.click(toggle);
+
+    expect(localStorage.getItem(MOBILE_WEB_KEY)).toBe('on');
+    await waitFor(() => expect(setWebMobileModeMock).toHaveBeenLastCalledWith(true));
+
+    fireEvent.click(toggle);
+    expect(localStorage.getItem(MOBILE_WEB_KEY)).toBeNull();
+    await waitFor(() => expect(setWebMobileModeMock).toHaveBeenLastCalledWith(false));
   });
 
   it('offers optional sidebar space control for websites only', () => {

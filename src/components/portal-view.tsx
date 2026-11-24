@@ -21,6 +21,7 @@ import {
   isOfflineCaptureActive,
   openOfflineCollection,
 } from '../lib/offline';
+import { isMobileWebEnabled, setWebMobileMode } from '../lib/web-mobile';
 import { UrlModal } from './url-modal';
 import { PhoneUrlModal } from './phone-url-modal';
 import { LocalFilesModal } from './local-files-modal';
@@ -518,6 +519,10 @@ export const PortalView = () => {
   useEffect(() => {
     const timer = setInterval(() => setOfflineCapture(isOfflineCaptureActive()), 500);
     return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    // Restore the persisted mobile-page choice after a plugin reload.
+    void setWebMobileMode(isMobileWebEnabled()).catch(() => undefined);
   }, []);
   const readerVisible =
     !!url &&

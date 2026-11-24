@@ -1,6 +1,6 @@
 # UmeYc-Portal 交接文档
 
-> 更新时间：2026-11-24 · 当前版本：`1.0.0-zh-cn.45`（最新提交见 `git log`）
+> 更新时间：2026-11-24 · 当前版本：`1.0.0-zh-cn.46`（最新提交见 `git log`）
 >
 > **给接手的 Claude：** 先读仓库根的 `README.md`，按它顶部的阅读顺序接手；本文件是第 2 步，也是实际进度、待办、构建/发布流程和踩坑记录的权威来源。用户使用简体中文交流。
 >
@@ -15,7 +15,7 @@
 - 上游 fork：<https://github.com/xiaochaom/UmeYc-Portal>（又来自 `ajustinjames/decky-portal`，稳定基线 `v0.1.1`）
 - 本地主分支：`main`；远程 `origin` 指向上面的 fork，`upstream` 指向上游。
 - 发布方式：GitHub Releases，标签格式 `fork-1.0.0-zh-cn.NN`；资产固定名为 `UmeYc-Portal.zip`。
-- 最新 Release：<https://github.com/ChongChongCoda/UmeYc-Portal/releases/tag/fork-1.0.0-zh-cn.45>
+- 最新 Release：<https://github.com/ChongChongCoda/UmeYc-Portal/releases/tag/fork-1.0.0-zh-cn.46>
 - 直链：`https://github.com/ChongChongCoda/UmeYc-Portal/releases/latest/download/UmeYc-Portal.zip`
 - 交接包内已带构建产物：`out/UmeYc-Portal.zip`（633,573 字节，与 .42 Release 资产一致）。
 
@@ -44,6 +44,8 @@
 15. **离线保存跳转匹配（.43）**：扫码发送短链或分享链、页面跳转后网址变化时，若 CEF 中只有一个非 Steam 网页，按该页面保存，不再报「等待网页加载超时」。
 16. **窗口主动清理（.43）**：卸载/重载插件时主动 `Destroy()` 阅读器 BrowserView，并在创建新视图前销毁上一插件实例残留的 `window.portal`，避免关不掉的残留网页窗口。
 17. **随插件页显示（.45）**：Decky 中打开本插件页时显示阅读器；按返回键回到插件列表时自动收起。通过 `titleView` 上的 `data-umeyc-title` 标记判断当前是否在插件页（`isPortalPageOpen`）；旧版 Decky 找不到标记时回退到「侧栏打开即显示」。
+18. **手机版网页（.46）**：设置页开关；开启后 `WebScroller` 对当前页设置 Android Chrome UA、触摸模拟和移动视口并刷新一次，站点切到移动版；每次重连后重新应用，关闭时恢复桌面 UA 并刷新。状态存 `portal.mobileWeb`。
+19. **缩放不留白（.46）**：`assets/web-zoom.js` 在首次缩放前记录占满视口的容器，缩小时给它们设置 `min-height: calc(100vh / 缩放比例)`，抵消 CSS zoom 不改变 `vh` 的问题；恢复默认时还原。
 
 ### 2.2 最近提交
 
@@ -67,26 +69,29 @@ a313341 Add smartphone-style touch gestures to the local atlas
 - Deck 实机已确认：自动更新检查成功（.39）、Steam 键盘地图搜索通过（.40）、.42 可安装。
 - **实机反馈（.42/.44）**：扫码后离线保存报「等待网页加载超时」、插件卸载后窗口残留，已在 .43 修复；.44 的悬浮「攻略」按钮被否决，.45 改为随插件页显示/返回即收起。
 - **.45 实机确认（2026-11-24）**：点开插件页显示、返回插件列表自动收起，用户确认可用。
-- **尚未实机确认**：.41 小黑盒一级链接全流程；.42 的缩放修复和断网自动打开离线副本；.43 的两项修复（离线短链保存、卸载窗口清理）。
+- **尚未实机确认**：.41 小黑盒一级链接全流程；.42 的缩放修复和断网自动打开离线副本；.43 的两项修复（离线短链保存、卸载窗口清理）；.46 的手机版与缩放留白修复。
 
 ---
 
 ## 3. 下一步：实机验证（最重要）
 
-### 3.1 验证 .45
+### 3.1 验证 .46
 
-1. 安装 .45：设置页「检查并下载更新」→ Decky「从 ZIP 文件安装插件」→ 选 `/home/deck/Downloads/UmeYc-Portal.zip`。
-2. **随插件页显示**：已在 .45 实机确认（点开显示、返回收起）。
-3. 联网扫码发送一篇小黑盒文章（可用短链/分享链），等待出现「离线保存完成」，不再出现「离线保存失败：等待网页加载超时」。
-4. 点网页右上角缩小/默认/放大：**不应再出现 Python 异常**。
-5. 关闭 Wi‑Fi，从「网页」历史点击同一个网址：应提示「已打开离线副本」并显示本地页面。
-6. 在 Portal 打开时卸载/重载插件：**阅读器窗口应立即消失**；若仍残留，记录是否有 `window.portal` 及 Decky 版本。
-7. 也可从「本地文件 → 离线网页」直接打开；删除集合时应连同 `pages/` 一起删除。
+1. 安装 .46：设置页「检查并下载更新」→ Decky「从 ZIP 文件安装插件」→ 选 `/home/deck/Downloads/UmeYc-Portal.zip`。
+2. **手机版网页**：设置页打开「手机版网页」→ 当前网页刷新一次；B 站等站点应切到 `m.` 移动版；关闭开关 → 恢复桌面版并刷新。
+3. **缩放留白**：在 B 站/小黑盒这类整屏页面上连续点「缩小」→ 底部不应出现大片空白；点「默认」→ 恢复原样。
+4. **随插件页显示**：已在 .45 实机确认（点开显示、返回收起）。
+5. 联网扫码发送一篇小黑盒文章（可用短链/分享链），等待出现「离线保存完成」，不再出现「离线保存失败：等待网页加载超时」。
+6. 点网页右上角缩小/默认/放大：**不应再出现 Python 异常**。
+7. 关闭 Wi‑Fi，从「网页」历史点击同一个网址：应提示「已打开离线副本」并显示本地页面。
+8. 在 Portal 打开时卸载/重载插件：**阅读器窗口应立即消失**；若仍残留，记录是否有 `window.portal` 及 Decky 版本。
+9. 也可从「本地文件 → 离线网页」直接打开；删除集合时应连同 `pages/` 一起删除。
 
-如果第 2 步仍失败：记录「攻略」按钮是否可见、点击后侧栏状态、页面是否重载。
-如果第 3 步仍失败：记录提示原文、扫码发送的原始网址、页面实际停止的 URL、`/home/deck/homebrew/logs/UmeYc-Portal/<时间>.log`。
-如果第 5 步仍失败：确认是从「网页」历史点击（不是旧标签）、断网后 `navigator.onLine` 是否为 false、历史 URL 与保存时的最终 URL 是否一致（短链跳转可能导致不一致）。必要时放宽 `findOfflineCollection` 的匹配或记录保存时原始 URL 的映射。
-如果第 6 步仍失败：说明残留视图不是本插件创建或 onDismount 未执行；重启 Steam 可清掉，并记录 Decky 版本。
+如果第 2 步失败：记录站点是否跳转到 `m.` 域名、页面是否刷新、`/home/deck/homebrew/logs/UmeYc-Portal/<时间>.log`。
+如果第 3 步仍留白：记录站点和页面结构（是否为固定高度容器），必要时把 `assets/web-zoom.js` 的容器判定条件放宽。
+如果第 5 步仍失败：记录提示原文、扫码发送的原始网址、页面实际停止的 URL、`/home/deck/homebrew/logs/UmeYc-Portal/<时间>.log`。
+如果第 7 步仍失败：确认是从「网页」历史点击（不是旧标签）、断网后 `navigator.onLine` 是否为 false、历史 URL 与保存时的最终 URL 是否一致（短链跳转可能导致不一致）。必要时放宽 `findOfflineCollection` 的匹配或记录保存时原始 URL 的映射。
+如果第 8 步仍失败：说明残留视图不是本插件创建或 onDismount 未执行；重启 Steam 可清掉，并记录 Decky 版本。
 
 ### 3.2 验证 .41 小黑盒一级链接
 
@@ -155,7 +160,7 @@ Windows 上 `tests.test_local_files` / `test_local_library` / `test_phone_input`
 
 ### 5.1 版本号
 
-- `package.json` 的 `version`：如 `1.0.0-zh-cn.45`。
+- `package.json` 的 `version`：如 `1.0.0-zh-cn.46`。
 - `README.md` 的「当前版本」同步更新。
 - `plugin.json` **没有** version 字段，不要加。
 - `scripts/package.py` 使用 `plugin.json` 的 `name` 作为 ZIP 名。
@@ -173,17 +178,17 @@ python scripts/package.py
 # 2. 提交 + tag
 git add -A
 git commit -m "…"
-git tag fork-1.0.0-zh-cn.45
+git tag fork-1.0.0-zh-cn.46
 
 # 3. 推送（旧机需要 https_proxy；新机直连可用）
 git push origin main
-git push origin fork-1.0.0-zh-cn.45
+git push origin fork-1.0.0-zh-cn.46
 
 # 4. 创建 Release（注意 --repo，默认可能解析到上游）
 #    新机 gh 不在 PATH：export PATH="/c/Program Files/GitHub CLI:$PATH"
-gh release create fork-1.0.0-zh-cn.45 out/UmeYc-Portal.zip \
+gh release create fork-1.0.0-zh-cn.46 out/UmeYc-Portal.zip \
   --repo ChongChongCoda/UmeYc-Portal \
-  --title "UmeYc-Portal 1.0.0-zh-cn.45" --latest \
+  --title "UmeYc-Portal 1.0.0-zh-cn.46" --latest \
   --notes "更新说明…"
 ```
 
@@ -210,7 +215,7 @@ curl -s https://api.github.com/repos/ChongChongCoda/UmeYc-Portal/releases/latest
 | `main.py` | Decky `Plugin` 入口、所有 callable、保存任务、迁移、更新检查、启动离线服务。**绝不能把内部属性命名为 `_migration` / `_uninstall` 等保留钩子。** |
 | `web_capture.py` | CDP 抓取：等待页面、懒加载预滚、MHTML 快照、失败退化为整页截图、小黑盒一级链接抓取、href 改写与恢复。 |
 | `mhtml_bundle.py` | MHTML → 无脚本静态目录：资源落地、相对路径改写、CSS 处理、`rewrite_page_links`。 |
-| `web_scroll.py` | 通过 CDP 发原生滚轮/按键/缩放；页面匹配（标题→URL→同路径→唯一网页）；视频全屏按键。 |
+| `web_scroll.py` | 通过 CDP 发原生滚轮/按键/缩放；页面匹配（标题→URL→同路径→唯一网页）；视频全屏按键；`set_mobile_mode` 设置手机 UA/触摸/移动视口并刷新。 |
 | `offline_store.py` | 离线集合 manifest、列表、token 授权、删除。 |
 | `offline_server.py` | loopback 只读静态服务，路径穿越/符号链接防护，CSP 禁脚本。 |
 | `phone_input.py` | 手机扫码接收服务（网址/图片/纯文本搜索），5 分钟会话、随机 token。 |
@@ -233,6 +238,7 @@ curl -s https://api.github.com/repos/ChongChongCoda/UmeYc-Portal/releases/latest
 | `src/components/phone-url-modal.tsx` | 扫码传送 UI，触发自动离线保存。 |
 | `src/lib/offline.ts` | 保存状态轮询、离线集合列表/打开/删除、断网查找 `findSavedOfflinePage`。 |
 | `src/lib/updates.ts` | 更新检查 callable 与本地存储键。 |
+| `src/lib/web-mobile.ts` | 手机版网页开关的存储键与 `set_web_mobile_mode` callable。 |
 | `src/lib/url-history.ts` | 最近浏览/标题持久化。 |
 
 ### 6.3 数据布局
@@ -248,7 +254,7 @@ curl -s https://api.github.com/repos/ChongChongCoda/UmeYc-Portal/releases/latest
 
 ### 6.4 localStorage 键
 
-`portal`（主状态）、`portal.uploadDirectory`、`portal.offlineAuto`、`portal.urlHistory`、`portal.urlHistoryTitles`、`portal.localAppDirectory`、`portal.localAppEntry`、`portal.updateCheckedAt`、`portal.updateReady`、`portal.updateError`。
+`portal`（主状态）、`portal.uploadDirectory`、`portal.offlineAuto`、`portal.mobileWeb`、`portal.urlHistory`、`portal.urlHistoryTitles`、`portal.localAppDirectory`、`portal.localAppEntry`、`portal.updateCheckedAt`、`portal.updateReady`、`portal.updateError`。
 
 ---
 
@@ -280,6 +286,7 @@ curl -s https://api.github.com/repos/ChongChongCoda/UmeYc-Portal/releases/latest
 - `.43` 实机反馈两项修复：扫码短链跳转导致离线保存匹配超时（`_matching_pages` 增加「唯一非 Steam 网页」回退）；插件卸载/重载后阅读器窗口残留（onDismount 主动 Destroy + 清理上一实例的 `window.portal`）。
 - `.44` 曾加入标题栏「收起」+ 左上角「攻略」悬浮按钮；用户否决悬浮按钮。
 - `.45` 改为随插件页显示：`titleView` 标记检测当前是否在插件页，返回插件列表即收起；移除 `collapsed` / `manualVisible` 与悬浮按钮。
+- `.46` 新增设置页「手机版网页」（Android UA + 触摸 + 移动视口，切换时刷新）；修复缩小时固定高度页面底部留白（`web-zoom.js` 拉伸整屏容器）。
 
 ---
 

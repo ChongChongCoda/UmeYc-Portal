@@ -39,6 +39,7 @@ export const setReaderMotionMock = vi.fn(async () => undefined);
 export const scrollWebPageMock = vi.fn(async () => undefined);
 export const releaseWebScrollMock = vi.fn(async () => undefined);
 export const zoomWebPageMock = vi.fn(async () => ({ factor: 1 }));
+export const setWebMobileModeMock = vi.fn(async () => ({ mobile: false }));
 export const sendWebSpaceMock = vi.fn(async (): Promise<void> => undefined);
 export const toggleWebFullscreenMock = vi.fn(async (): Promise<void> => undefined);
 export const getWebPageStateMock = vi.fn();
@@ -53,6 +54,7 @@ export const callable = vi.fn((route: string) => {
     scroll_web_page: scrollWebPageMock,
     release_web_scroll: releaseWebScrollMock,
     zoom_web_page: zoomWebPageMock,
+    set_web_mobile_mode: setWebMobileModeMock,
     send_web_space: sendWebSpaceMock,
     toggle_web_fullscreen: toggleWebFullscreenMock,
     get_web_page_state: getWebPageStateMock,

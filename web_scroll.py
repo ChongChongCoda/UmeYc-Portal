@@ -8,6 +8,12 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 
+MOBILE_USER_AGENT = (
+    "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+)
+
+
 class WebScroller:
     def __init__(self):
         self._lock = asyncio.Lock()
@@ -18,6 +24,83 @@ class WebScroller:
         self._sequence = 0
         self._last_video_key = None
         self._next_video_key_at = 0
+        self._mobile = False
+        self._mobile_url = None
+        self._desktop_user_agent = None
+
+    async def set_mobile_mode(self, enabled):
+        """Switch the current page between the desktop and mobile layout."""
+        enabled = bool(enabled)
+        if enabled == self._mobile:
+            return {"mobile": self._mobile}
+        self._mobile = enabled
+        self._mobile_url = None
+        if self._socket is not None and not self._socket.closed:
+            try:
+                if enabled:
+                    await self._apply_mobile_mode()
+                else:
+                    await self._reset_mobile_mode()
+            except (RuntimeError, OSError, ValueError):
+                # A page can vanish between the toggle and the switch; the next
+                # connection applies the new mode.
+                pass
+        return {"mobile": self._mobile}
+
+    async def _apply_mobile_mode(self):
+        if not self._mobile or self._socket is None:
+            return
+        try:
+            await self._request("Network.enable", {})
+            if self._desktop_user_agent is None:
+                current = await self._request(
+                    "Runtime.evaluate",
+                    {"expression": "navigator.userAgent", "returnByValue": True},
+                )
+                agent = current.get("result", {}).get("value")
+                if isinstance(agent, str) and agent:
+                    self._desktop_user_agent = agent
+            await self._request(
+                "Network.setUserAgentOverride", {"userAgent": MOBILE_USER_AGENT}
+            )
+            await self._request(
+                "Emulation.setTouchEmulationEnabled",
+                {"enabled": True, "maxTouchPoints": 5},
+            )
+            metrics = await self._request("Page.getLayoutMetrics", {})
+            viewport = metrics.get("cssLayoutViewport") or {}
+            width = int(viewport.get("clientWidth") or 0)
+            height = int(viewport.get("clientHeight") or 0)
+            if width > 0 and height > 0:
+                await self._request(
+                    "Emulation.setDeviceMetricsOverride",
+                    {
+                        "width": width,
+                        "height": height,
+                        "deviceScaleFactor": 1,
+                        "mobile": True,
+                    },
+                )
+            if self._mobile_url != self._url:
+                self._mobile_url = self._url
+                await self._request("Page.reload", {"ignoreCache": True})
+        except (RuntimeError, OSError, ValueError):
+            self._mobile_url = None
+
+    async def _reset_mobile_mode(self):
+        if self._socket is None:
+            return
+        await self._request("Network.enable", {})
+        if self._desktop_user_agent:
+            await self._request(
+                "Network.setUserAgentOverride", {"userAgent": self._desktop_user_agent}
+            )
+        await self._request("Emulation.clearDeviceMetricsOverride", {})
+        await self._request(
+            "Emulation.setTouchEmulationEnabled", {"enabled": False}
+        )
+        self._mobile_url = None
+        await self._request("Page.reload", {"ignoreCache": True})
 
     async def _disconnect(self):
         if self._socket is not None:
@@ -238,6 +321,7 @@ class WebScroller:
         if self._url != url or self._title != title or self._socket is None or self._socket.closed:
             await self._disconnect()
             await self._connect(url, title)
+            await self._apply_mobile_mode()
     async def _request(self, method, params):
         self._sequence += 1
         await self._socket.send_json({

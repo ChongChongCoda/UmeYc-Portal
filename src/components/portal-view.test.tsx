@@ -5,7 +5,9 @@ import {
   prepareLocalFileMock,
   sendWebSpaceMock,
   getWebPageStateMock,
+  setWebMobileModeMock,
 } from '../__mocks__/decky-api';
+import { MOBILE_WEB_KEY } from '../lib/web-mobile';
 import { toLocalFileUrl } from '../lib/local-files';
 import {
   getOpenSideMenu,
@@ -117,6 +119,15 @@ describe('PortalView and PortalViewOuter', () => {
 
     expect(staleDestroy).toHaveBeenCalledTimes(1);
     expect(createBrowserView).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores the stored mobile web mode when the reader mounts', async () => {
+    localStorage.setItem(MOBILE_WEB_KEY, 'on');
+    vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar)] as never);
+
+    render(<PortalView />);
+
+    await waitFor(() => expect(setWebMobileModeMock).toHaveBeenCalledWith(true));
   });
 
   it('shows the reader while the Portal plugin page is open', () => {

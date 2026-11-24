@@ -156,6 +156,62 @@ class WebScrollTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls[1]["method"], "Emulation.setPageScaleFactor")
         self.assertEqual(calls[1]["params"], {"pageScaleFactor": 1})
 
+    async def _echo_cdp_results(self, desktop_ua="DesktopUA"):
+        async def echo(*_args, **_kwargs):
+            sent = self.socket.send_json.call_args.args[0]
+            result = {}
+            if sent["method"] == "Runtime.evaluate":
+                result = {"result": {"type": "string", "value": desktop_ua}}
+            elif sent["method"] == "Page.getLayoutMetrics":
+                result = {"cssLayoutViewport": {"clientWidth": 534, "clientHeight": 500}}
+            return {"id": sent["id"], "result": result}
+
+        self.socket.receive_json.side_effect = echo
+
+    def _calls(self):
+        return [call.args[0] for call in self.socket.send_json.call_args_list]
+
+    async def test_mobile_mode_applies_a_mobile_agent_and_reloads_once(self):
+        await self._echo_cdp_results()
+        await self.scroller.set_mobile_mode(True)
+        await self.scroller.scroll("https://guide.example/", 0.5, 0, 506, 534)
+
+        calls = self._calls()
+        methods = [call["method"] for call in calls]
+        self.assertIn("Network.setUserAgentOverride", methods)
+        self.assertIn("Emulation.setTouchEmulationEnabled", methods)
+        self.assertIn("Emulation.setDeviceMetricsOverride", methods)
+        self.assertEqual(methods.count("Page.reload"), 1)
+        metrics = next(c for c in calls if c["method"] == "Emulation.setDeviceMetricsOverride")
+        self.assertEqual(metrics["params"], {
+            "width": 534, "height": 500, "deviceScaleFactor": 1, "mobile": True,
+        })
+
+        await self.scroller.scroll("https://guide.example/", 0.5, 0, 506, 534)
+        self.assertEqual([c["method"] for c in self._calls()].count("Page.reload"), 1)
+
+    async def test_mobile_mode_waits_for_the_next_connection(self):
+        await self._echo_cdp_results()
+        await self.scroller.set_mobile_mode(True)
+        self.assertEqual(self._calls(), [])
+
+        await self.scroller.scroll("https://guide.example/", 0.5, 0, 506, 534)
+        self.assertIn("Page.reload", [c["method"] for c in self._calls()])
+
+    async def test_disabling_mobile_mode_restores_the_desktop_agent(self):
+        await self._echo_cdp_results(desktop_ua="SteamDesktopUA")
+        await self.scroller.set_mobile_mode(True)
+        await self.scroller.scroll("https://guide.example/", 0.5, 0, 506, 534)
+
+        await self.scroller.set_mobile_mode(False)
+
+        calls = self._calls()
+        restore = [c for c in calls if c["method"] == "Network.setUserAgentOverride"][-1]
+        self.assertEqual(restore["params"], {"userAgent": "SteamDesktopUA"})
+        self.assertIn("Emulation.clearDeviceMetricsOverride",
+                      [c["method"] for c in calls])
+        self.assertIn("Page.reload", [c["method"] for c in calls][-1:])
+
     async def test_invalid_zoom_action_cannot_evaluate_script(self):
         with self.assertRaises(ValueError):
             await self.scroller.zoom("https://guide.example/", "script injection")

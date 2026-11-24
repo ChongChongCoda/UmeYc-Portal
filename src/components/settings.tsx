@@ -13,6 +13,7 @@ import { ViewMode } from '../lib/util';
 import { historyLabel } from '../lib/url-history';
 import { OFFLINE_AUTO_KEY } from '../lib/offline';
 import { isLocalAppUrl } from '../lib/local-app';
+import { isMobileWebEnabled, setMobileWebEnabled, setWebMobileMode } from '../lib/web-mobile';
 import {
   checkPluginUpdate,
   PendingUpdate,
@@ -31,6 +32,7 @@ export const Settings = () => {
   const [offlineAuto, setOfflineAuto] = useState(
     () => localStorage.getItem(OFFLINE_AUTO_KEY) !== 'off',
   );
+  const [mobileWeb, setMobileWeb] = useState(isMobileWebEnabled);
   const [updating, setUpdating] = useState(false);
   const [updateNotice, setUpdateNotice] = useState(() => {
     try {
@@ -247,6 +249,20 @@ export const Settings = () => {
               setOfflineAuto(checked);
               if (checked) localStorage.removeItem(OFFLINE_AUTO_KEY);
               else localStorage.setItem(OFFLINE_AUTO_KEY, 'off');
+            }}
+          />
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ToggleField
+            label="手机版网页"
+            checked={mobileWeb}
+            description="向网站请求手机版页面，适合窄侧栏阅读；切换后当前网页会刷新一次。"
+            onChange={(checked) => {
+              setMobileWeb(checked);
+              setMobileWebEnabled(checked);
+              void setWebMobileMode(checked).catch((error: unknown) =>
+                toaster.toast({ title: '切换手机版失败', body: String(error) }),
+              );
             }}
           />
         </PanelSectionRow>
