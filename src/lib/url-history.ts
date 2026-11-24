@@ -107,6 +107,27 @@ export const historyLabel = (storage: HistoryStorage, url: string): string => {
   return getHistoryTitles(storage)[historyAddress(url) || url] || '未命名网页';
 };
 
+export const remapUrlHistory = (
+  storage: HistoryStorage,
+  mapping: Record<string, string>,
+): string[] => {
+  const recent = getUrlHistory(storage);
+  const titles = getHistoryTitles(storage);
+  const next = [...new Set(recent.map((url) => mapping[url] ?? url))].slice(0, URL_HISTORY_LIMIT);
+  const nextTitles: Record<string, string> = {};
+  recent.forEach((url) => {
+    const target = mapping[url] ?? url;
+    if (titles[url] && next.includes(target)) nextTitles[target] = titles[url];
+  });
+  try {
+    storage.setItem(URL_HISTORY_KEY, JSON.stringify(next));
+    storage.setItem(URL_HISTORY_TITLES_KEY, JSON.stringify(nextTitles));
+  } catch {
+    // A full history store must not fail the migration result.
+  }
+  return next;
+};
+
 export const removeUrl = (storage: HistoryStorage, url: string): boolean => {
   try {
     storage.setItem(

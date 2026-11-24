@@ -18,9 +18,13 @@ from urllib.parse import urlsplit
 
 # Decky loads main.py by filename rather than importing a plugin package.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from phone_input import PhoneInputSession, lan_address
+from phone_input import PhoneInputSession, lan_address, normalize_url
 from image_upload import upload_destination, ensure_upload_directory
 from local_library import LocalLibrary
+from offline_server import OfflineServer
+from offline_store import OfflineLibrary
+from storage_migration import StorageMigration, plan_migration
+from web_capture import PageCapture, SaveJob
 from web_scroll import WebScroller
 
 
@@ -233,6 +237,13 @@ class Plugin:
         self._phone_lock = asyncio.Lock()
         self._web_scroller = WebScroller()
         self._library = LocalLibrary(SUPPORTED_EXTENSIONS)
+        self._offline = OfflineLibrary()
+        self._offline_server = None
+        self._offline_thread = None
+        self._migration = None
+        self._migration_lock = threading.Lock()
+        self._offline_save = None
+        self._offline_save_task = None
 
     def _start(self):
         if self._server is None:
@@ -291,7 +302,96 @@ class Plugin:
             raise ValueError("图片保存位置无法使用，请重新选择文件夹") from error
         return {"directory": str(destination)}
 
+    def _start_offline(self):
+        if self._offline_server is None:
+            self._offline_server = OfflineServer(self._offline)
+            self._offline_thread = threading.Thread(
+                target=self._offline_server.serve_forever, daemon=True
+            )
+            self._offline_thread.start()
+
+    async def list_offline_collections(self, directory: str = ""):
+        destination = upload_destination(directory)
+        try:
+            ensure_upload_directory(destination)
+            return self._offline.list(str(destination))
+        except OSError as error:
+            raise ValueError("无法读取离线网页目录，请检查存储设备") from error
+
+    async def open_offline_collection(self, token: str):
+        self._start_offline()
+        return {"url": self._offline_server.authorize(token)}
+
+    async def delete_offline_collection(self, token: str):
+        return self._offline.delete(token)
+
+    async def plan_storage_migration(self, old: str, new: str):
+        return await asyncio.to_thread(plan_migration, old, new)
+
+    async def start_storage_migration(self, old: str, new: str):
+        plan = await asyncio.to_thread(plan_migration, old, new)
+        if plan["total"] == 0:
+            return {"started": False, "plan": plan, "status": None}
+        with self._migration_lock:
+            if self._migration is not None and self._migration.snapshot()["status"] == "running":
+                raise ValueError("已有迁移任务正在进行，请先等待或取消")
+            job = await asyncio.to_thread(StorageMigration, old, new)
+            job.start()
+            self._migration = job
+        return {"started": True, "plan": plan, "status": job.snapshot()}
+
+    async def get_storage_migration_status(self):
+        job = self._migration
+        return job.snapshot() if job is not None else None
+
+    async def cancel_storage_migration(self):
+        job = self._migration
+        if job is None:
+            return None
+        job.cancel()
+        return job.snapshot()
+
+    async def save_offline_page(self, url: str, title: str = "", directory: str = ""):
+        source = normalize_url(url)
+        if (
+            self._offline_save is not None
+            and self._offline_save.snapshot()["status"] == "running"
+        ):
+            raise ValueError("已有离线保存任务正在进行，请等待完成或取消")
+        destination = upload_destination(directory)
+        try:
+            ensure_upload_directory(destination)
+        except OSError as error:
+            raise ValueError("保存位置无法使用，请检查存储设备") from error
+        clean_title = title.strip()[:300] if isinstance(title, str) else ""
+        job = SaveJob(PageCapture(self._offline, str(destination)), source, clean_title)
+        self._offline_save = job
+        self._offline_save_task = asyncio.create_task(job.run())
+        return {"started": True, "status": job.snapshot()}
+
+    async def get_offline_save_status(self):
+        job = self._offline_save
+        return job.snapshot() if job is not None else None
+
+    async def cancel_offline_save(self):
+        job = self._offline_save
+        if job is None:
+            return None
+        job.cancel()
+        return job.snapshot()
+
     async def _unload(self):
+        if self._migration is not None:
+            self._migration.cancel()
+        if self._offline_save is not None:
+            self._offline_save.cancel()
+        if self._offline_save_task is not None:
+            self._offline_save_task.cancel()
+            try:
+                await self._offline_save_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._offline_save_task = None
         await self._web_scroller.close()
         async with self._phone_lock:
             if self._phone is not None:
@@ -304,6 +404,12 @@ class Plugin:
             await asyncio.to_thread(self._thread.join, 2)
             self._server = None
             self._thread = None
+        if self._offline_server is not None:
+            await asyncio.to_thread(self._offline_server.shutdown)
+            self._offline_server.server_close()
+            await asyncio.to_thread(self._offline_thread.join, 2)
+            self._offline_server = None
+            self._offline_thread = None
 
     async def get_web_page_state(self, url: str, title: str = ""):
         return await self._web_scroller.page_state(url, title)

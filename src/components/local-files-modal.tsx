@@ -1,8 +1,8 @@
 import { DialogButton, Focusable, ModalRootProps } from '@decky/ui';
 import { PanelDialog } from './panel-dialog';
 import { FolderPicker } from './folder-picker';
-import { useEffect, useState } from 'react';
-import { FaFolder, FaTrashAlt } from 'react-icons/fa';
+import { useEffect, useRef, useState } from 'react';
+import { FaFolder, FaGlobe, FaTrashAlt } from 'react-icons/fa';
 import { useGlobalState } from '../hooks/global-state';
 import {
   deleteLocalFile,
@@ -14,9 +14,29 @@ import {
   prepareLocalFile,
   toLocalFileUrl,
 } from '../lib/local-files';
-import { removeUrl } from '../lib/url-history';
+import {
+  cancelOfflineSave,
+  deleteOfflineCollection,
+  getOfflineSaveStatus,
+  listOfflineCollections,
+  OfflineCollection,
+  OfflineSaveStatus,
+  offlineStatusLabel,
+  openOfflineCollection,
+} from '../lib/offline';
+import { remapUrlHistory, removeUrl } from '../lib/url-history';
 import { ViewMode } from '../lib/util';
 import { getUploadDirectory, UPLOAD_DIRECTORY_KEY } from '../lib/phone-input';
+import {
+  cancelStorageMigration,
+  formatBytes,
+  getStorageMigrationStatus,
+  isOfflineCollectionUrl,
+  planStorageMigration,
+  startStorageMigration,
+  StorageMigrationPlan,
+  StorageMigrationStatus,
+} from '../lib/storage-migration';
 import { modalWithState } from './modal';
 
 export const LocalFilesModal = (props: ModalRootProps) => {
@@ -28,8 +48,19 @@ export const LocalFilesModal = (props: ModalRootProps) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [pending, setPending] = useState<LocalEntry | null>(null);
-  const [pickingDirectory, setPickingDirectory] = useState(false);
+  const [pendingCollection, setPendingCollection] = useState<OfflineCollection | null>(null);
+  const [collections, setCollections] = useState<OfflineCollection[]>([]);
+  const [saveRoot, setSaveRoot] = useState<string | null>(null);
+  const [pickerMode, setPickerMode] = useState<'browse' | 'save' | null>(null);
+  const [migrationPlan, setMigrationPlan] = useState<StorageMigrationPlan | null>(null);
+  const [migrationStatus, setMigrationStatus] = useState<StorageMigrationStatus | null>(null);
+  const [migrating, setMigrating] = useState(false);
+  const [migrationError, setMigrationError] = useState('');
+  const [saveStatus, setSaveStatus] = useState<OfflineSaveStatus | null>(null);
   const [lifetime] = useState(() => ({ active: true }));
+  const openedCollectionUrls = useRef(new Map<string, string>());
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveRefreshRef = useRef('');
 
   useEffect(() => {
     lifetime.active = true;
@@ -70,6 +101,82 @@ export const LocalFilesModal = (props: ModalRootProps) => {
       active = false;
     };
   }, [directory, revision]);
+
+  useEffect(() => {
+    let active = true;
+    void getUploadDirectory(localStorage.getItem(UPLOAD_DIRECTORY_KEY) || '')
+      .then((root) => {
+        if (active) setSaveRoot(root.directory);
+        return listOfflineCollections(root.directory);
+      })
+      .then(
+        (result) => {
+          if (active) setCollections(result.entries);
+        },
+        () => {
+          if (active) setCollections([]);
+        },
+      );
+    return () => {
+      active = false;
+    };
+  }, [revision]);
+
+  useEffect(() => {
+    let active = true;
+    void getStorageMigrationStatus().then(
+      (status) => {
+        if (!active || !status || status.status !== 'running') return;
+        setMigrating(true);
+        setMigrationStatus(status);
+        pollMigration();
+      },
+      () => undefined,
+    );
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (pollTimer.current) clearTimeout(pollTimer.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const tick = async () => {
+      try {
+        const status = await getOfflineSaveStatus();
+        if (!active) return;
+        setSaveStatus(status);
+        if (status && status.status === 'running') {
+          timer = setTimeout(() => void tick(), 1000);
+          return;
+        }
+        if (
+          status &&
+          status.status === 'done' &&
+          status.collection &&
+          saveRefreshRef.current !== status.collection.id
+        ) {
+          saveRefreshRef.current = status.collection.id;
+          setRevision((value) => value + 1);
+        }
+      } catch {
+        // A failed status read must not break the file list.
+      }
+    };
+    void tick();
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
 
   const open = async (entry: LocalEntry) => {
     if (entry.directory) return setDirectory(entry.path);
@@ -120,40 +227,496 @@ export const LocalFilesModal = (props: ModalRootProps) => {
     }
   };
 
-  if (pickingDirectory)
+  const openCollection = async (collection: OfflineCollection) => {
+    setBusy(true);
+    setError('');
+    try {
+      const result = await openOfflineCollection(collection.open_token);
+      if (!lifetime.active) return;
+      openedCollectionUrls.current.set(collection.id, result.url);
+      setGlobalState((state) => ({
+        ...state,
+        url: result.url,
+        pageTitle: collection.title,
+        pageTitleUrl: result.url,
+        viewMode: ViewMode.Sidebar,
+        visible: true,
+      }));
+      props.closeModal?.();
+    } catch (cause) {
+      if (lifetime.active) setError(`无法打开离线网页：${String(cause)}`);
+    } finally {
+      if (lifetime.active) setBusy(false);
+    }
+  };
+
+  const removeCollection = async () => {
+    if (!pendingCollection) return;
+    setBusy(true);
+    setError('');
+    try {
+      await deleteOfflineCollection(pendingCollection.delete_token);
+      if (!lifetime.active) return;
+      const opened = openedCollectionUrls.current.get(pendingCollection.id);
+      if (opened) {
+        openedCollectionUrls.current.delete(pendingCollection.id);
+        setGlobalState((state) =>
+          state.url === opened
+            ? {
+                ...state,
+                url: '',
+                pageTitle: undefined,
+                pageTitleUrl: undefined,
+                viewMode: ViewMode.Closed,
+              }
+            : state,
+        );
+      }
+      setPendingCollection(null);
+      setRevision((value) => value + 1);
+    } catch (cause) {
+      if (lifetime.active) setError(`无法删除离线网页：${String(cause)}`);
+    } finally {
+      if (lifetime.active) setBusy(false);
+    }
+  };
+
+  function switchSaveRoot(status: StorageMigrationStatus) {
+    if (!status.new) return;
+    const mapping: Record<string, string> = {};
+    for (const item of status.images) {
+      mapping[toLocalFileUrl(item.from)] = toLocalFileUrl(item.to);
+    }
+    remapUrlHistory(localStorage, mapping);
+    localStorage.setItem(UPLOAD_DIRECTORY_KEY, status.new);
+    setSaveRoot(status.new);
+    const localDirectory = localStorage.getItem(LOCAL_DIRECTORY_KEY);
+    if (
+      localDirectory &&
+      status.old &&
+      (localDirectory === status.old || localDirectory.startsWith(`${status.old}/`))
+    ) {
+      localStorage.setItem(
+        LOCAL_DIRECTORY_KEY,
+        status.new + localDirectory.slice(status.old.length),
+      );
+    }
+    setDirectory((current) => {
+      if (!current || !status.old) return current;
+      if (current !== status.old && !current.startsWith(`${status.old}/`)) return current;
+      return status.new + current.slice(status.old.length);
+    });
+    setGlobalState((state) => {
+      const moved = mapping[state.url];
+      if (moved) return { ...state, url: moved };
+      if (isOfflineCollectionUrl(state.url) && status.collections.length > 0) {
+        return {
+          ...state,
+          url: '',
+          pageTitle: undefined,
+          pageTitleUrl: undefined,
+          viewMode: ViewMode.Closed,
+        };
+      }
+      return state;
+    });
+    setRevision((value) => value + 1);
+  }
+
+  function finishMigration(status: StorageMigrationStatus | null) {
+    if (pollTimer.current) {
+      clearTimeout(pollTimer.current);
+      pollTimer.current = null;
+    }
+    setMigrating(false);
+    if (!status) return;
+    setMigrationStatus(status);
+    if (status.status === 'done' || status.done_items > 0) {
+      switchSaveRoot(status);
+    }
+  }
+
+  function pollMigration() {
+    const tick = async () => {
+      if (!lifetime.active) return;
+      try {
+        const status = await getStorageMigrationStatus();
+        if (!lifetime.active) return;
+        setMigrationStatus(status);
+        if (status && status.status === 'running') {
+          pollTimer.current = setTimeout(() => void tick(), 500);
+        } else {
+          finishMigration(status);
+        }
+      } catch (cause) {
+        if (lifetime.active) {
+          setMigrating(false);
+          setMigrationError(`读取迁移进度失败：${String(cause)}`);
+        }
+      }
+    };
+    void tick();
+  }
+
+  const beginMigration = async () => {
+    if (!migrationPlan || migrating) return;
+    setBusy(true);
+    setMigrationError('');
+    try {
+      const result = await startStorageMigration(migrationPlan.old, migrationPlan.new);
+      if (!lifetime.active) return;
+      if (!result.started) {
+        localStorage.setItem(UPLOAD_DIRECTORY_KEY, result.plan.new);
+        setSaveRoot(result.plan.new);
+        setMigrationPlan(null);
+        setRevision((value) => value + 1);
+        return;
+      }
+      setMigrating(true);
+      setMigrationPlan(null);
+      setMigrationStatus(result.status);
+      pollMigration();
+    } catch (cause) {
+      if (lifetime.active) setMigrationError(`无法开始迁移：${String(cause)}`);
+    } finally {
+      if (lifetime.active) setBusy(false);
+    }
+  };
+
+  const keepOldFiles = () => {
+    if (!migrationPlan) return;
+    localStorage.setItem(UPLOAD_DIRECTORY_KEY, migrationPlan.new);
+    setSaveRoot(migrationPlan.new);
+    setMigrationPlan(null);
+    setRevision((value) => value + 1);
+  };
+
+  const changeSaveLocation = async (path: string) => {
+    setPickerMode(null);
+    setMigrationError('');
+    if (saveRoot && path === saveRoot) return;
+    if (!saveRoot) {
+      localStorage.setItem(UPLOAD_DIRECTORY_KEY, path);
+      setSaveRoot(path);
+      setRevision((value) => value + 1);
+      return;
+    }
+    setBusy(true);
+    try {
+      const plan = await planStorageMigration(saveRoot, path);
+      if (!lifetime.active) return;
+      if (plan.total === 0) {
+        localStorage.setItem(UPLOAD_DIRECTORY_KEY, plan.new);
+        setSaveRoot(plan.new);
+        setRevision((value) => value + 1);
+        return;
+      }
+      setMigrationPlan(plan);
+      setMigrationStatus(null);
+    } catch (cause) {
+      if (lifetime.active) setMigrationError(`无法检查原保存位置：${String(cause)}`);
+    } finally {
+      if (lifetime.active) setBusy(false);
+    }
+  };
+
+  const retryMigration = async () => {
+    if (!migrationStatus) return;
+    setBusy(true);
+    setMigrationError('');
+    try {
+      const result = await startStorageMigration(migrationStatus.old, migrationStatus.new);
+      if (!lifetime.active) return;
+      if (!result.started) {
+        finishMigration({ ...migrationStatus, status: 'done', errors: [] });
+        return;
+      }
+      setMigrating(true);
+      setMigrationStatus(result.status);
+      pollMigration();
+    } catch (cause) {
+      if (lifetime.active) setMigrationError(`无法继续迁移：${String(cause)}`);
+    } finally {
+      if (lifetime.active) setBusy(false);
+    }
+  };
+
+  const dismissMigration = () => {
+    setMigrationPlan(null);
+    setMigrationStatus(null);
+    setMigrationError('');
+  };
+
+  const cancelMigration = async () => {
+    try {
+      const status = await cancelStorageMigration();
+      if (lifetime.active && status) setMigrationStatus(status);
+    } catch {
+      // The next poll reports the real state.
+    }
+  };
+
+  const cancelSave = async () => {
+    try {
+      const status = await cancelOfflineSave();
+      if (lifetime.active && status) setSaveStatus(status);
+    } catch {
+      // The next poll reports the real state.
+    }
+  };
+
+  if (pickerMode === 'browse')
     return (
       <FolderPicker
         initial={listing?.directory || '/run/media'}
-        onCancel={() => setPickingDirectory(false)}
+        onCancel={() => setPickerMode(null)}
         onChoose={(path) => {
           setDirectory(path);
-          setPickingDirectory(false);
+          setPickerMode(null);
         }}
+      />
+    );
+
+  if (pickerMode === 'save')
+    return (
+      <FolderPicker
+        initial={saveRoot || listing?.directory || '/run/media'}
+        onCancel={() => setPickerMode(null)}
+        onChoose={(path) => void changeSaveLocation(path)}
       />
     );
 
   return (
     <PanelDialog
       {...props}
-      strTitle={pending ? '删除本地文件' : '本地文件'}
-      strOKButtonText={pending ? '删除文件' : '关闭'}
+      strTitle={pendingCollection ? '删除离线网页' : pending ? '删除本地文件' : '本地文件'}
+      strOKButtonText={pendingCollection ? '删除网页' : pending ? '删除文件' : '关闭'}
       strCancelButtonText="取消"
-      bAlertDialog={!pending}
+      bAlertDialog={!pending && !pendingCollection}
       bOKDisabled={busy}
       bCancelDisabled={busy}
-      onOK={() => (pending ? void remove() : props.closeModal?.())}
-      onCancel={() => (pending ? setPending(null) : props.closeModal?.())}
+      onOK={() =>
+        pendingCollection ? void removeCollection() : pending ? void remove() : props.closeModal?.()
+      }
+      onCancel={() =>
+        pendingCollection
+          ? setPendingCollection(null)
+          : pending
+            ? setPending(null)
+            : props.closeModal?.()
+      }
     >
-      {pending ? (
+      {pendingCollection ? (
+        <div>
+          <p>确定删除离线网页「{pendingCollection.title}」吗？删除后无法恢复。</p>
+          <p style={{ fontSize: 12, opacity: 0.7 }}>
+            共 {pendingCollection.pages} 页，包含的页面和图片会一起删除。
+          </p>
+        </div>
+      ) : pending ? (
         <div>
           <p>确定删除「{pending.name}」吗？删除后无法恢复。</p>
           <p style={{ fontSize: 12, opacity: 0.7, overflowWrap: 'anywhere' }}>{pending.path}</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ fontSize: 12, opacity: 0.7 }}>保存位置（图片与离线网页）</div>
+            <Focusable flow-children="row" style={{ display: 'flex', gap: 8, minWidth: 0 }}>
+              <div
+                title={saveRoot || '自动选择（优先 SD 卡）'}
+                style={{
+                  flex: '1 1 0',
+                  minWidth: 0,
+                  alignSelf: 'center',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  fontSize: 13,
+                }}
+              >
+                {saveRoot || '自动选择（优先 SD 卡）'}
+              </div>
+              <DialogButton
+                disabled={busy || migrating || loading}
+                onClick={() => setPickerMode('save')}
+                style={{ flex: '0 0 auto', minWidth: 0, whiteSpace: 'nowrap' }}
+              >
+                更换
+              </DialogButton>
+            </Focusable>
+          </div>
+          {saveStatus && saveStatus.status === 'running' && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+                border: '1px solid rgba(80,160,255,0.45)',
+                borderRadius: 8,
+                padding: 10,
+              }}
+            >
+              <div>正在离线保存：{saveStatus.title || saveStatus.url}</div>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>{saveStatus.message}</div>
+              <DialogButton disabled={busy} onClick={() => void cancelSave()}>
+                取消保存
+              </DialogButton>
+            </div>
+          )}
+          {saveStatus?.status === 'error' && <p role="alert">离线保存失败：{saveStatus.message}</p>}
+          {saveStatus?.status === 'done' && saveStatus.collection && (
+            <div style={{ fontSize: 12, opacity: 0.75 }}>
+              已保存离线网页「{saveStatus.collection.title}」。
+            </div>
+          )}
+          {migrationPlan && !migrating && !migrationStatus && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+                border: '1px solid rgba(255,255,255,0.18)',
+                borderRadius: 8,
+                padding: 10,
+              }}
+            >
+              <div>
+                原保存位置有 {migrationPlan.images} 张图片、{migrationPlan.collections} 个离线网页（
+                {formatBytes(migrationPlan.bytes)}）。
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>
+                迁移到新位置；同名文件会自动编号，不会覆盖。也可以只更换位置，旧文件留在原处。
+              </div>
+              <Focusable flow-children="row" style={{ display: 'flex', gap: 8 }}>
+                <DialogButton
+                  disabled={busy}
+                  onClick={() => void beginMigration()}
+                  style={{ flex: '1 1 0', minWidth: 0 }}
+                >
+                  迁移并更换
+                </DialogButton>
+                <DialogButton
+                  disabled={busy}
+                  onClick={keepOldFiles}
+                  style={{ flex: '1 1 0', minWidth: 0 }}
+                >
+                  仅更换
+                </DialogButton>
+                <DialogButton
+                  disabled={busy}
+                  onClick={() => setMigrationPlan(null)}
+                  style={{ flex: '0 0 auto', minWidth: 0 }}
+                >
+                  取消
+                </DialogButton>
+              </Focusable>
+            </div>
+          )}
+          {(migrating || migrationStatus) && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+                border: '1px solid rgba(255,255,255,0.18)',
+                borderRadius: 8,
+                padding: 10,
+              }}
+            >
+              {migrating ? (
+                <>
+                  <div>
+                    正在迁移 {migrationStatus?.done_items ?? 0}/{migrationStatus?.total_items ?? 0}{' '}
+                    · {formatBytes(migrationStatus?.bytes_done ?? 0)}/
+                    {formatBytes(migrationStatus?.bytes_total ?? 0)}
+                  </div>
+                  {migrationStatus?.current && (
+                    <div
+                      style={{
+                        fontSize: 12,
+                        opacity: 0.7,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {migrationStatus.current}
+                    </div>
+                  )}
+                  <div
+                    style={{
+                      height: 6,
+                      background: 'rgba(255,255,255,0.15)',
+                      borderRadius: 3,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${
+                          migrationStatus && migrationStatus.total_items > 0
+                            ? Math.min(
+                                100,
+                                Math.round(
+                                  (migrationStatus.done_items / migrationStatus.total_items) * 100,
+                                ),
+                              )
+                            : 0
+                        }%`,
+                        background: '#1a9fff',
+                      }}
+                    />
+                  </div>
+                  <DialogButton disabled={busy} onClick={() => void cancelMigration()}>
+                    取消迁移
+                  </DialogButton>
+                </>
+              ) : (
+                <>
+                  <div>
+                    {migrationStatus?.status === 'done'
+                      ? `迁移完成：${migrationStatus.images.length} 张图片、${migrationStatus.collections.length} 个离线网页。`
+                      : migrationStatus?.status === 'cancelled'
+                        ? '迁移已取消。'
+                        : '迁移结束。'}
+                    {migrationStatus && migrationStatus.errors.length > 0
+                      ? ` ${migrationStatus.errors.length} 项未迁移，仍留在原位置。`
+                      : ''}
+                  </div>
+                  <Focusable flow-children="row" style={{ display: 'flex', gap: 8 }}>
+                    {migrationStatus &&
+                      (migrationStatus.status !== 'done' || migrationStatus.errors.length > 0) && (
+                        <DialogButton
+                          disabled={busy}
+                          onClick={() => void retryMigration()}
+                          style={{ flex: '1 1 0', minWidth: 0 }}
+                        >
+                          重试剩余项
+                        </DialogButton>
+                      )}
+                    <DialogButton disabled={busy} onClick={dismissMigration}>
+                      完成
+                    </DialogButton>
+                  </Focusable>
+                  {migrationStatus && migrationStatus.errors.length > 0 && (
+                    <div style={{ fontSize: 11, opacity: 0.7, maxHeight: 84, overflowY: 'auto' }}>
+                      {migrationStatus.errors.map((error) => (
+                        <div key={error.path} style={{ overflowWrap: 'anywhere' }}>
+                          {error.path || '未知文件'}：{error.message}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+          {migrationError && <p role="alert">{migrationError}</p>}
           <Focusable flow-children="row" style={{ display: 'flex', gap: 8 }}>
             <DialogButton
-              onClick={() => setPickingDirectory(true)}
+              onClick={() => setPickerMode('browse')}
               disabled={busy}
               style={{ flex: '1 1 0', width: 0, minWidth: 0, whiteSpace: 'nowrap' }}
             >
@@ -170,6 +733,68 @@ export const LocalFilesModal = (props: ModalRootProps) => {
           <div style={{ fontSize: 12, opacity: 0.7, overflowWrap: 'anywhere' }}>
             {listing?.directory || directory}
           </div>
+          {collections.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>离线网页</div>
+              <div
+                style={{
+                  maxHeight: '24vh',
+                  overflowY: 'auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                }}
+              >
+                {collections.map((collection) => (
+                  <Focusable
+                    key={collection.id}
+                    flow-children="row"
+                    style={{ display: 'flex', gap: 8, minWidth: 0 }}
+                  >
+                    <DialogButton
+                      aria-label={`打开离线网页 ${collection.title}`}
+                      disabled={busy}
+                      onClick={() => void openCollection(collection)}
+                      style={{
+                        flex: '1 1 0',
+                        minWidth: 0,
+                        textAlign: 'left',
+                        padding: '10px 12px',
+                      }}
+                    >
+                      <span
+                        title={collection.title}
+                        style={{
+                          display: 'block',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        <FaGlobe style={{ marginRight: 8 }} aria-hidden="true" />
+                        {collection.title}
+                      </span>
+                      <span style={{ display: 'block', fontSize: 11, opacity: 0.65 }}>
+                        {collection.pages} 页 · {offlineStatusLabel(collection.status)}
+                      </span>
+                    </DialogButton>
+                    <DialogButton
+                      aria-label={`删除离线网页 ${collection.title}`}
+                      disabled={busy}
+                      onClick={() => {
+                        setPending(null);
+                        setPendingCollection(collection);
+                        setError('');
+                      }}
+                      style={{ flex: '0 0 40px', minWidth: 40, padding: 8 }}
+                    >
+                      <FaTrashAlt size={18} aria-hidden="true" />
+                    </DialogButton>
+                  </Focusable>
+                ))}
+              </div>
+            </div>
+          )}
           {listing && listing.parent !== listing.directory && (
             <DialogButton disabled={busy || loading} onClick={() => setDirectory(listing.parent)}>
               上一级
@@ -220,6 +845,7 @@ export const LocalFilesModal = (props: ModalRootProps) => {
                       aria-label={`删除文件 ${entry.name}`}
                       disabled={busy}
                       onClick={() => {
+                        setPendingCollection(null);
                         setPending(entry);
                         setError('');
                       }}

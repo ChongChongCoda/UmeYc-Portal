@@ -261,4 +261,18 @@ describe('Settings', () => {
     const setter = vi.mocked(vi.mocked(useGlobalState).mock.results.slice(-1)[0].value[1]);
     expect(setter.mock.calls.slice(-1)[0][0](state).activePanel).toBe('url');
   });
+
+  it('persists disabling automatic offline saving for scanned URLs', () => {
+    const state = createState(ViewMode.Sidebar);
+    vi.mocked(useGlobalState).mockReturnValue([state, vi.fn(), {}] as never);
+    render(<Settings />);
+    const toggle = screen.getByLabelText('扫码后自动离线保存') as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+    fireEvent.click(toggle);
+    expect(toggle.checked).toBe(false);
+    expect(localStorage.getItem('portal.offlineAuto')).toBe('off');
+    fireEvent.click(toggle);
+    expect(toggle.checked).toBe(true);
+    expect(localStorage.getItem('portal.offlineAuto')).toBeNull();
+  });
 });

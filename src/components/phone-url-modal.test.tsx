@@ -9,6 +9,9 @@ import {
   startUrlInputMock,
   getUrlInputStatusMock,
   cancelUrlInputMock,
+  planStorageMigrationMock,
+  saveOfflinePageMock,
+  startStorageMigrationMock,
 } from '../__mocks__/decky-api';
 
 vi.mock('../hooks/global-state', () => ({ useGlobalState: vi.fn() }));
@@ -43,6 +46,7 @@ describe('QR URL input modal', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    localStorage.clear();
     state = { url: 'file:///guide.JPG', visible: true, viewMode: ViewMode.Closed };
     vi.mocked(useGlobalState).mockReturnValue([
       state,
@@ -53,6 +57,31 @@ describe('QR URL input modal', () => {
     startUrlInputMock.mockReset().mockResolvedValue(session);
     getUrlInputStatusMock.mockReset().mockResolvedValue({ status: 'waiting' });
     cancelUrlInputMock.mockReset().mockResolvedValue(undefined);
+    planStorageMigrationMock.mockReset().mockResolvedValue({
+      old: '/run/media/deck/SD/攻略',
+      new: '/run/media/deck/SD/攻略',
+      images: 0,
+      collections: 0,
+      total: 0,
+      bytes: 0,
+      conflicts: 0,
+      same_device: true,
+    });
+    startStorageMigrationMock.mockReset().mockResolvedValue({
+      started: true,
+      plan: {
+        old: '/run/media/deck/SD/攻略',
+        new: '/run/media/deck/SD/攻略',
+        images: 0,
+        collections: 0,
+        total: 0,
+        bytes: 0,
+        conflicts: 0,
+        same_device: true,
+      },
+      status: null,
+    });
+    saveOfflinePageMock.mockReset().mockResolvedValue({ started: true, status: {} });
   });
 
   afterEach(() => {
@@ -88,7 +117,20 @@ describe('QR URL input modal', () => {
     expect(state.url).toBe('https://example.com/guide');
     expect(state.visible).toBe(true);
     expect(close).toHaveBeenCalledOnce();
+    expect(saveOfflinePageMock).toHaveBeenCalledWith('https://example.com/guide', '', '');
     unmount();
+  });
+
+  it('does not auto-save when offline saving is disabled', async () => {
+    localStorage.setItem('portal.offlineAuto', 'off');
+    getUrlInputStatusMock.mockResolvedValueOnce({
+      status: 'received',
+      url: 'https://example.com/guide',
+    });
+    render(<PhoneUrlModal closeModal={vi.fn()} />);
+    await flush();
+    expect(state.url).toBe('https://example.com/guide');
+    expect(saveOfflinePageMock).not.toHaveBeenCalled();
   });
 
   it('does not navigate when a pending response arrives after cancellation', async () => {
@@ -193,6 +235,32 @@ describe('QR URL input modal', () => {
     unmount();
   });
 
+  it('offers migration when the previous save folder still has content', async () => {
+    localStorage.setItem('portal.uploadDirectory', '/run/media/deck/SD/旧攻略');
+    planStorageMigrationMock.mockResolvedValue({
+      old: '/run/media/deck/SD/旧攻略',
+      new: '/run/media/deck/SD/攻略',
+      images: 2,
+      collections: 1,
+      total: 3,
+      bytes: 2048,
+      conflicts: 0,
+      same_device: true,
+    });
+    const { unmount } = render(<PhoneUrlModal closeModal={vi.fn()} />);
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: '选择图片保存位置' }));
+    await flush();
+    fireEvent.click(screen.getByText('use folder'));
+    await flush();
+    await flush();
+    expect(screen.getByText(/原保存位置有 2 张图片/)).toBeTruthy();
+    fireEvent.click(screen.getByText('仅更换位置'));
+    await flush();
+    expect(localStorage.getItem('portal.uploadDirectory')).toBe('/run/media/deck/SD/攻略');
+    unmount();
+  });
+
   it('keeps polling during upload and opens a received Chinese local file', async () => {
     const url = 'file:///run/media/deck/SD/%E6%94%BB%E7%95%A5.png';
     getUrlInputStatusMock
@@ -208,6 +276,7 @@ describe('QR URL input modal', () => {
     expect(state.url).toBe(url);
     expect(state.viewMode).toBe(ViewMode.Sidebar);
     expect(close).toHaveBeenCalledOnce();
+    expect(saveOfflinePageMock).not.toHaveBeenCalled();
     unmount();
   });
 });

@@ -6,9 +6,11 @@ import {
   Field,
   DialogButton,
 } from '@decky/ui';
+import { useState } from 'react';
 
 import { ViewMode } from '../lib/util';
 import { historyLabel } from '../lib/url-history';
+import { OFFLINE_AUTO_KEY } from '../lib/offline';
 import { useGlobalState } from '../hooks/global-state';
 
 export const Settings = () => {
@@ -16,6 +18,9 @@ export const Settings = () => {
     { viewMode, url, sidebarVideoSpace, rightStickFullscreen, pageTitle, pageTitleUrl },
     setGlobalState,
   ] = useGlobalState();
+  const [offlineAuto, setOfflineAuto] = useState(
+    () => localStorage.getItem(OFFLINE_AUTO_KEY) !== 'off',
+  );
 
   return (
     <>
@@ -74,6 +79,18 @@ export const Settings = () => {
           >
             扫码传送
           </ButtonItem>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ToggleField
+            label="扫码后自动离线保存"
+            checked={offlineAuto}
+            description="收到网址后等页面加载完成，再保存到「本地文件 → 离线网页」；视频不会离线保存。"
+            onChange={(checked) => {
+              setOfflineAuto(checked);
+              if (checked) localStorage.removeItem(OFFLINE_AUTO_KEY);
+              else localStorage.setItem(OFFLINE_AUTO_KEY, 'off');
+            }}
+          />
         </PanelSectionRow>
         <PanelSectionRow>
           <div style={{ fontSize: 12, opacity: 0.7 }}>
