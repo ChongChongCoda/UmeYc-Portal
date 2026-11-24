@@ -20,6 +20,7 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from phone_input import PhoneInputSession, lan_address, normalize_url
 from image_upload import upload_destination, ensure_upload_directory
+from local_app import LocalAppServer, validate_app
 from local_library import LocalLibrary
 from offline_server import OfflineServer
 from offline_store import OfflineLibrary
@@ -244,6 +245,8 @@ class Plugin:
         self._migration_lock = threading.Lock()
         self._offline_save = None
         self._offline_save_task = None
+        self._local_app_server = None
+        self._local_app_thread = None
 
     def _start(self):
         if self._server is None:
@@ -380,6 +383,23 @@ class Plugin:
         job.cancel()
         return job.snapshot()
 
+    def _start_local_app(self):
+        if self._local_app_server is None:
+            self._local_app_server = LocalAppServer()
+            self._local_app_thread = threading.Thread(
+                target=self._local_app_server.serve_forever, daemon=True
+            )
+            self._local_app_thread.start()
+
+    async def validate_local_app(self, directory: str):
+        return await asyncio.to_thread(validate_app, directory)
+
+    async def open_local_app(self, directory: str, entry: str = "index.html"):
+        info = await asyncio.to_thread(validate_app, directory)
+        self._start_local_app()
+        url = self._local_app_server.authorize(info["directory"], entry)
+        return {"url": url, "directory": info["directory"], "entries": info["entries"]}
+
     async def _unload(self):
         if self._migration is not None:
             self._migration.cancel()
@@ -410,6 +430,12 @@ class Plugin:
             await asyncio.to_thread(self._offline_thread.join, 2)
             self._offline_server = None
             self._offline_thread = None
+        if self._local_app_server is not None:
+            await asyncio.to_thread(self._local_app_server.shutdown)
+            self._local_app_server.server_close()
+            await asyncio.to_thread(self._local_app_thread.join, 2)
+            self._local_app_server = None
+            self._local_app_thread = None
 
     async def get_web_page_state(self, url: str, title: str = ""):
         return await self._web_scroller.page_state(url, title)

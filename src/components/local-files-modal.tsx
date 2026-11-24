@@ -24,6 +24,13 @@ import {
   offlineStatusLabel,
   openOfflineCollection,
 } from '../lib/offline';
+import {
+  LOCAL_APP_DIRECTORY_KEY,
+  LOCAL_APP_ENTRY_KEY,
+  LOCAL_APP_PAGES,
+  openLocalApp,
+  validateLocalApp,
+} from '../lib/local-app';
 import { remapUrlHistory, removeUrl } from '../lib/url-history';
 import { ViewMode } from '../lib/util';
 import { getUploadDirectory, UPLOAD_DIRECTORY_KEY } from '../lib/phone-input';
@@ -51,7 +58,11 @@ export const LocalFilesModal = (props: ModalRootProps) => {
   const [pendingCollection, setPendingCollection] = useState<OfflineCollection | null>(null);
   const [collections, setCollections] = useState<OfflineCollection[]>([]);
   const [saveRoot, setSaveRoot] = useState<string | null>(null);
-  const [pickerMode, setPickerMode] = useState<'browse' | 'save' | null>(null);
+  const [pickerMode, setPickerMode] = useState<'browse' | 'save' | 'map' | null>(null);
+  const [mapDirectory, setMapDirectory] = useState('');
+  const [mapEntries, setMapEntries] = useState<string[]>([]);
+  const [mapError, setMapError] = useState('');
+  const [mapBusy, setMapBusy] = useState(false);
   const [migrationPlan, setMigrationPlan] = useState<StorageMigrationPlan | null>(null);
   const [migrationStatus, setMigrationStatus] = useState<StorageMigrationStatus | null>(null);
   const [migrating, setMigrating] = useState(false);
@@ -177,6 +188,34 @@ export const LocalFilesModal = (props: ModalRootProps) => {
       if (timer) clearTimeout(timer);
     };
   }, []);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(LOCAL_APP_DIRECTORY_KEY) || '';
+    setMapDirectory(stored);
+    if (!stored) {
+      setMapEntries([]);
+      setMapError('');
+      return;
+    }
+    let active = true;
+    void validateLocalApp(stored).then(
+      (info) => {
+        if (!active) return;
+        setMapDirectory(info.directory);
+        setMapEntries(info.entries);
+        localStorage.setItem(LOCAL_APP_DIRECTORY_KEY, info.directory);
+        setMapError('');
+      },
+      (cause) => {
+        if (!active) return;
+        setMapEntries([]);
+        setMapError(`地图册不可用：${String(cause)}`);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [revision]);
 
   const open = async (entry: LocalEntry) => {
     if (entry.directory) return setDirectory(entry.path);
@@ -465,6 +504,62 @@ export const LocalFilesModal = (props: ModalRootProps) => {
     }
   };
 
+  const chooseMapDirectory = async (path: string) => {
+    setPickerMode(null);
+    setMapBusy(true);
+    setMapError('');
+    try {
+      const info = await validateLocalApp(path);
+      if (!lifetime.active) return;
+      localStorage.setItem(LOCAL_APP_DIRECTORY_KEY, info.directory);
+      setMapDirectory(info.directory);
+      setMapEntries(info.entries);
+    } catch (cause) {
+      if (lifetime.active) setMapError(`地图册不可用：${String(cause)}`);
+    } finally {
+      if (lifetime.active) setMapBusy(false);
+    }
+  };
+
+  const openMap = async (entry: string) => {
+    const directory = mapDirectory || localStorage.getItem(LOCAL_APP_DIRECTORY_KEY) || '';
+    if (!directory) {
+      setMapError('请先选择地图册文件夹');
+      return;
+    }
+    setMapBusy(true);
+    setMapError('');
+    try {
+      const result = await openLocalApp(directory, entry);
+      if (!lifetime.active) return;
+      localStorage.setItem(LOCAL_APP_DIRECTORY_KEY, result.directory);
+      localStorage.setItem(LOCAL_APP_ENTRY_KEY, entry);
+      setMapDirectory(result.directory);
+      setMapEntries(result.entries);
+      setGlobalState((state) => ({
+        ...state,
+        url: result.url,
+        pageTitle: '女王魔域离线地图册',
+        pageTitleUrl: result.url,
+        viewMode: ViewMode.Sidebar,
+        visible: true,
+      }));
+      props.closeModal?.();
+    } catch (cause) {
+      if (lifetime.active) setMapError(`无法打开地图册：${String(cause)}`);
+    } finally {
+      if (lifetime.active) setMapBusy(false);
+    }
+  };
+
+  const clearMap = () => {
+    localStorage.removeItem(LOCAL_APP_DIRECTORY_KEY);
+    localStorage.removeItem(LOCAL_APP_ENTRY_KEY);
+    setMapDirectory('');
+    setMapEntries([]);
+    setMapError('');
+  };
+
   if (pickerMode === 'browse')
     return (
       <FolderPicker
@@ -486,10 +581,19 @@ export const LocalFilesModal = (props: ModalRootProps) => {
       />
     );
 
+  if (pickerMode === 'map')
+    return (
+      <FolderPicker
+        initial={mapDirectory || '/run/media'}
+        onCancel={() => setPickerMode(null)}
+        onChoose={(path) => void chooseMapDirectory(path)}
+      />
+    );
+
   return (
     <PanelDialog
       {...props}
-      strTitle={pendingCollection ? '删除离线网页' : pending ? '删除本地文件' : '本地文件'}
+      strTitle={pendingCollection ? '删除离线网页' : pending ? '删除本地文件' : '本地文件与地图册'}
       strOKButtonText={pendingCollection ? '删除网页' : pending ? '删除文件' : '关闭'}
       strCancelButtonText="取消"
       bAlertDialog={!pending && !pendingCollection}
@@ -570,6 +674,54 @@ export const LocalFilesModal = (props: ModalRootProps) => {
               已保存离线网页「{saveStatus.collection.title}」。
             </div>
           )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ fontSize: 12, opacity: 0.7 }}>离线地图册</div>
+            <div
+              title={mapDirectory || '未选择'}
+              style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                fontSize: 13,
+              }}
+            >
+              {mapDirectory || '未选择（先解压到 SD 卡）'}
+            </div>
+            <Focusable flow-children="row" style={{ display: 'flex', gap: 8 }}>
+              <DialogButton
+                disabled={busy || mapBusy}
+                onClick={() => setPickerMode('map')}
+                style={{ flex: '1 1 0', minWidth: 0 }}
+              >
+                选择地图册文件夹
+              </DialogButton>
+              {mapDirectory && (
+                <DialogButton
+                  disabled={busy || mapBusy}
+                  onClick={clearMap}
+                  style={{ flex: '0 0 auto', minWidth: 0 }}
+                >
+                  清除
+                </DialogButton>
+              )}
+            </Focusable>
+            {mapEntries.length > 0 && (
+              <Focusable flow-children="row" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {LOCAL_APP_PAGES.filter((page) => mapEntries.includes(page.entry)).map((page) => (
+                  <DialogButton
+                    key={page.entry}
+                    disabled={busy || mapBusy}
+                    onClick={() => void openMap(page.entry)}
+                    style={{ flex: '1 1 0', minWidth: 90 }}
+                  >
+                    {page.label}
+                  </DialogButton>
+                ))}
+              </Focusable>
+            )}
+            {mapError && <p role="alert">{mapError}</p>}
+            <div style={{ fontSize: 11, opacity: 0.6 }}>地图册只引用所选文件夹，不复制数据。</div>
+          </div>
           {migrationPlan && !migrating && !migrationStatus && (
             <div
               style={{

@@ -140,7 +140,7 @@ describe('Settings', () => {
       {},
     ] as never);
     render(<Settings />);
-    fireEvent.click(screen.getByText('本地文件'));
+    fireEvent.click(screen.getByText('本地文件与地图册'));
     const setter = vi.mocked(vi.mocked(useGlobalState).mock.results.slice(-1)[0].value[1]);
     expect(setter).toHaveBeenLastCalledWith(expect.any(Function));
     const update = setter.mock.calls.slice(-1)[0][0];

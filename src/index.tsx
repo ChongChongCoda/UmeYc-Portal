@@ -8,6 +8,7 @@ import { Settings } from './components/settings';
 import { Position, ViewMode } from './lib/util';
 import { State, GlobalContext } from './hooks/global-state';
 import { getPersistedPortalState, PORTAL_STORAGE_KEY } from './lib/storage';
+import { isLoopbackUrl } from './lib/local-app';
 import { rememberUrl } from './lib/url-history';
 
 export default definePlugin(() => {
@@ -24,27 +25,38 @@ export default definePlugin(() => {
     rightStickFullscreen: false,
   };
 
+  const restored = getPersistedPortalState(localStorage);
+  if (isLoopbackUrl(restored.url || '')) {
+    // Session tokens do not survive a reload; reopen these from their lists.
+    restored.url = '';
+    restored.viewMode = ViewMode.Closed;
+  }
   const state = new StateManager<State>({
     ...defaultState,
-    ...getPersistedPortalState(localStorage),
+    ...restored,
   });
 
   let lastUrl: string | undefined;
   state.watch(
     ({ viewMode, position, margin, size, url, sidebarVideoSpace, rightStickFullscreen }) => {
+      const loopback = isLoopbackUrl(url);
       localStorage.setItem(
         PORTAL_STORAGE_KEY,
         JSON.stringify({
-          viewMode: viewMode === ViewMode.Closed ? ViewMode.Closed : ViewMode.Sidebar,
+          viewMode: loopback
+            ? ViewMode.Closed
+            : viewMode === ViewMode.Closed
+              ? ViewMode.Closed
+              : ViewMode.Sidebar,
           position,
           margin,
           size,
-          url,
+          url: loopback ? '' : url,
           sidebarVideoSpace,
           rightStickFullscreen,
         }),
       );
-      if (url !== lastUrl) {
+      if (!loopback && url !== lastUrl) {
         lastUrl = url;
         rememberUrl(localStorage, url);
       }

@@ -16,6 +16,9 @@ const historyAddress = (value: unknown): string | null => {
     if (path) return toLocalFileUrl(path);
     const parsed = new window.URL(value);
     if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) return null;
+    // Local preview, offline collection and local app URLs carry per-session
+    // tokens; they are reopened from their own lists, never from history.
+    if (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost') return null;
     // Bilibili rewrites tracking parameters while a video is playing. Keep
     // video/part identity so visiting the same episode never fills history.
     const video = parsed.pathname.match(/^\/video\/(BV[\w]+|av\d+)\/?$/);

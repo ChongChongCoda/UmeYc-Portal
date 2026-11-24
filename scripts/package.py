@@ -10,6 +10,7 @@ root = Path(__file__).resolve().parent.parent
 name = json.loads((root / "plugin.json").read_text(encoding="utf-8"))["name"]
 required = ["plugin.json", "package.json", "main.py", "phone_input.py", "image_upload.py", "local_library.py", "web_scroll.py",
             "offline_store.py", "offline_server.py", "storage_migration.py", "web_capture.py", "mhtml_bundle.py",
+            "local_app.py",
             "LICENSE", "README.md", "README.zh-CN.md", "README.en.md", "THIRD_PARTY_NOTICES.md",
             "dist/index.js", "assets/image-viewer.html", "assets/image-viewer.js", "assets/phone-input.html", "assets/web-zoom.js", "assets/zoom-icons.json"]
 for relative in required:

@@ -30,7 +30,7 @@ export const Settings = () => {
             layout="below"
             onClick={() => setGlobalState((state) => ({ ...state, activePanel: 'files' }))}
           >
-            本地文件
+            本地文件与地图册
           </ButtonItem>
         </PanelSectionRow>
         <PanelSectionRow>

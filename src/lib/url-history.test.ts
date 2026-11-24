@@ -17,6 +17,18 @@ describe('twenty-item browsing history', () => {
     );
   });
 
+  it('never stores loopback preview, offline collection or local app URLs', () => {
+    for (const url of [
+      'http://127.0.0.1:8137/atlas/index.html',
+      'http://localhost:9000/token/world.html',
+      'http://127.0.0.1:1234/viewer/token',
+      'https://example.com/ok',
+    ]) {
+      rememberUrl(localStorage, url);
+    }
+    expect(getUrlHistory(localStorage)).toEqual(['https://example.com/ok']);
+  });
+
   it('moves a repeated address to the front instead of duplicating it', () => {
     for (const url of ['https://a.example/', 'https://b.example/', 'https://a.example/'])
       rememberUrl(localStorage, url);

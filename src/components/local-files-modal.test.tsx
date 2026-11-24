@@ -13,10 +13,12 @@ import {
   listLocalFilesMock,
   listOfflineCollectionsMock,
   openOfflineCollectionMock,
+  openLocalAppMock,
   planStorageMigrationMock,
   startStorageMigrationMock,
   getUploadDirectoryMock,
   prepareLocalFileMock,
+  validateLocalAppMock,
 } from '../__mocks__/decky-api';
 import { getUrlHistory, rememberUrl } from '../lib/url-history';
 import { toLocalFileUrl } from '../lib/local-files';
@@ -164,6 +166,15 @@ describe('local file management', () => {
     cancelStorageMigrationMock.mockReset().mockResolvedValue(null);
     getOfflineSaveStatusMock.mockReset().mockResolvedValue(null);
     cancelOfflineSaveMock.mockReset().mockResolvedValue(null);
+    validateLocalAppMock.mockReset().mockResolvedValue({
+      directory: '/home/deck/女王魔域地图册',
+      entries: ['index.html', 'world.html', 'items.html'],
+    });
+    openLocalAppMock.mockReset().mockResolvedValue({
+      url: 'http://127.0.0.1:8137/atlas/index.html',
+      directory: '/home/deck/女王魔域地图册',
+      entries: ['index.html', 'world.html', 'items.html'],
+    });
   });
 
   it('opens a Chinese SD-card image after validation and restores visibility', async () => {
@@ -362,5 +373,19 @@ describe('local file management', () => {
     render(<LocalFilesModal closeModal={vi.fn()} />);
     await waitFor(() => expect(listOfflineCollectionsMock.mock.calls.length).toBeGreaterThan(1));
     expect(await screen.findByText(/已保存离线网页/)).toBeTruthy();
+  });
+
+  it('remembers an atlas folder and opens its 2D map', async () => {
+    const close = vi.fn();
+    render(<LocalFilesModal closeModal={close} />);
+    fireEvent.click(await screen.findByRole('button', { name: '选择地图册文件夹' }));
+    fireEvent.click(screen.getByText('use folder'));
+    await waitFor(() => expect(validateLocalAppMock).toHaveBeenCalledWith('/home/deck/Pictures'));
+    fireEvent.click(await screen.findByRole('button', { name: '2D 地图' }));
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
+    expect(openLocalAppMock).toHaveBeenCalledWith('/home/deck/女王魔域地图册', 'index.html');
+    expect(state.url).toBe('http://127.0.0.1:8137/atlas/index.html');
+    expect(state.viewMode).toBe(ViewMode.Sidebar);
+    expect(localStorage.getItem('portal.localAppDirectory')).toBe('/home/deck/女王魔域地图册');
   });
 });

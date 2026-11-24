@@ -10,6 +10,7 @@ import { getOpenSideMenu, isSteamBlockingUI, isVirtualKeyboardShowing } from '..
 import { ReaderInput } from './reader-input';
 import { WebHeader, WEB_HEADER_HEIGHT } from './web-header';
 import { rememberPageTitle, rememberUrl, removeUrl } from '../lib/url-history';
+import { isLoopbackUrl } from '../lib/local-app';
 import { UrlModal } from './url-modal';
 import { PhoneUrlModal } from './phone-url-modal';
 import { LocalFilesModal } from './local-files-modal';
@@ -216,15 +217,16 @@ const Browser = ({
             nativeTitle === (handles.view.Title || '') &&
             /^https?:\/\//i.test(page.url)
           ) {
+            const loopback = isLoopbackUrl(page.url);
             if (page.url !== url) {
               // Resolve an initial short link into one history item. Later
               // episode switches retain the previous episode as a separate item.
               if (pendingNavigation.current === url) removeUrl(localStorage, url);
               observedUrl.current = page.url;
-              rememberUrl(localStorage, page.url);
+              if (!loopback) rememberUrl(localStorage, page.url);
             }
             pendingNavigation.current = null;
-            rememberPageTitle(localStorage, page.url, page.title);
+            if (!loopback) rememberPageTitle(localStorage, page.url, page.title);
             if (
               current.url !== page.url ||
               current.pageTitle !== page.title ||

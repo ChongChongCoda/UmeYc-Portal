@@ -28,6 +28,8 @@ export const cancelStorageMigrationMock = vi.fn();
 export const saveOfflinePageMock = vi.fn();
 export const getOfflineSaveStatusMock = vi.fn();
 export const cancelOfflineSaveMock = vi.fn();
+export const validateLocalAppMock = vi.fn();
+export const openLocalAppMock = vi.fn();
 export const getUploadDirectoryMock = vi.fn(async (_directory: string) => ({
   directory: '/run/media/deck/SD/攻略',
 }));
@@ -65,6 +67,8 @@ export const callable = vi.fn((route: string) => {
     save_offline_page: saveOfflinePageMock,
     get_offline_save_status: getOfflineSaveStatusMock,
     cancel_offline_save: cancelOfflineSaveMock,
+    validate_local_app: validateLocalAppMock,
+    open_local_app: openLocalAppMock,
     get_upload_directory: getUploadDirectoryMock,
     start_url_input: startUrlInputMock,
     get_url_input_status: getUrlInputStatusMock,
