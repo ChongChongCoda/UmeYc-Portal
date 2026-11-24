@@ -10,6 +10,7 @@ import {
   startUrlInputMock,
 } from '../__mocks__/decky-api';
 
+vi.mock('../lib/steam-keyboard', () => ({ getVirtualKeyboardManager: () => undefined }));
 vi.mock('../hooks/global-state', () => ({ useGlobalState: vi.fn() }));
 vi.mock('@decky/ui', () => ({
   DialogButton: ({
