@@ -14,7 +14,7 @@ import shutil
 import time
 from urllib.parse import urlsplit
 
-from mhtml_bundle import convert_mhtml, wrap_screenshot
+from mhtml_bundle import convert_mhtml, rewrite_page_links, wrap_screenshot
 from offline_store import OfflineLibrary
 
 
@@ -24,6 +24,8 @@ READY_TIMEOUT = 20.0
 SETTLE_SECONDS = 1.5
 MAX_PAGE_HEIGHT = 16000
 MAX_PAGE_WIDTH = 4096
+MAX_LINK_PAGES = 30
+LINK_PATH_PREFIXES = ("/app/bbs/link/", "/app/bbs/post/")
 
 
 class CaptureError(RuntimeError):
@@ -101,7 +103,7 @@ LAZY_LOAD_EXPRESSION = """(async () => {
 
 LINKS_EXPRESSION = """(() => {
   const root = document.querySelector('.post__container, .image-text__content, article, main') || document.body;
-  const seen = new Set(); const links = [];
+  const seen = new Set(); const links = []; const restore = [];
   for (const a of root.querySelectorAll('a[href]')) {
     const raw = a.getAttribute('href') || '';
     let decoded = raw;
@@ -116,23 +118,84 @@ LINKS_EXPRESSION = """(() => {
       const u = decoded.match(/"url"\\s*:\\s*"(https?:\\/\\/[^"]+)"/);
       if (p) web = 'https://www.xiaoheihe.cn' + p[1];
       else if (u) web = u[1];
-    } else if (/^https?:\\/\\//i.test(raw)) {
+    } else {
+      // Relative anchors resolve through a.href; javascript:/mailto: are
+      // filtered by the protocol check below.
       web = a.href;
     }
     if (!web) continue;
     let absolute;
     try { absolute = new URL(web, location.href); } catch (e) { continue; }
     if (!/^https?:$/.test(absolute.protocol)) continue;
+    restore.push([a, a.getAttribute('href')]);
+    a.setAttribute('href', absolute.href);
     if (seen.has(absolute.href)) continue;
     seen.add(absolute.href);
     links.push({url: absolute.href,
       title: (a.innerText || a.textContent || '').trim().slice(0, 200),
       link_id: linkId});
   }
+  window.__portalLinkRestore = restore;
   return {url: location.href,
     title: (document.title || '').trim().slice(0, 300),
     links: links.slice(0, 200)};
 })()"""
+
+
+RESTORE_LINKS_EXPRESSION = """(() => {
+  const entries = window.__portalLinkRestore;
+  if (entries) {
+    for (const entry of entries) {
+      const a = entry[0], href = entry[1];
+      if (href === null) a.removeAttribute('href');
+      else a.setAttribute('href', href);
+    }
+  }
+  delete window.__portalLinkRestore;
+  return true;
+})()"""
+
+
+def _link_pages(links, base_url):
+    """Pick the article links worth saving as one-level offline subpages."""
+    if not isinstance(links, list):
+        return []
+    try:
+        base_host = (urlsplit(base_url).hostname or "").lower()
+    except ValueError:
+        return []
+    if base_host != "xiaoheihe.cn" and not base_host.endswith(".xiaoheihe.cn"):
+        return []
+    base = base_url.partition("#")[0]
+    selected = []
+    seen = set()
+    for item in links:
+        if not isinstance(item, dict):
+            continue
+        address = item.get("url")
+        if not isinstance(address, str):
+            continue
+        try:
+            parsed = urlsplit(address)
+        except ValueError:
+            continue
+        if parsed.scheme not in {"http", "https"}:
+            continue
+        host = (parsed.hostname or "").lower()
+        if host != "xiaoheihe.cn" and not host.endswith(".xiaoheihe.cn"):
+            continue
+        if not parsed.path.startswith(LINK_PATH_PREFIXES):
+            continue
+        clean = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+        if parsed.query:
+            clean += f"?{parsed.query}"
+        if clean == base or clean in seen:
+            continue
+        seen.add(clean)
+        selected.append({"url": clean, "title": str(item.get("title") or "")[:200]})
+        if len(selected) >= MAX_LINK_PAGES:
+            break
+    return selected
 
 
 class PageCapture:
@@ -155,6 +218,10 @@ class PageCapture:
         )
         socket = None
         created = None
+        client = None
+        restore_pending = False
+        final_url = url
+        navigated = False
         try:
             report("waiting", "等待网页加载")
             page = await self._wait_for_page(session, url, check)
@@ -187,23 +254,41 @@ class PageCapture:
             final_url = meta.get("url") or url
             page_title = title or meta.get("title") or "未命名网页"
             links = meta.get("links") if isinstance(meta.get("links"), list) else []
+            # LINKS_EXPRESSION canonicalized anchor hrefs for the snapshot.
+            restore_pending = True
             check()
             report("creating", "创建离线网页")
             created = await asyncio.to_thread(
                 self.library.create, self.directory, page_title, final_url, options or {}
             )
             destination = Path(created["directory"])
+            link_pages = _link_pages(links, final_url)
             summary = None
+            snapshot_data = None
             try:
                 report("snapshot", "保存页面快照")
                 snapshot = await client.call(
                     "Page.captureSnapshot", {"format": "mhtml"}, timeout=60
                 )
-                data = snapshot.get("data")
-                if not data:
+                snapshot_data = snapshot.get("data")
+                if not snapshot_data:
+                    raise CaptureError("页面快照为空")
+            except Exception:
+                snapshot_data = None
+            finally:
+                # Article hrefs were canonicalized for the snapshot; put the
+                # live DOM back before navigating or leaving the capture.
+                try:
+                    await client.evaluate(RESTORE_LINKS_EXPRESSION)
+                except CaptureError:
+                    pass
+                restore_pending = False
+            check()
+            try:
+                if not snapshot_data:
                     raise CaptureError("页面快照为空")
                 summary = await asyncio.to_thread(
-                    convert_mhtml, data, destination, final_url
+                    convert_mhtml, snapshot_data, destination, final_url
                 )
             except Exception:
                 if is_cancelled():
@@ -213,30 +298,111 @@ class PageCapture:
                     client, destination, page_title, final_url
                 )
             check()
+
+            sub_pages = []
+            link_map = {}
+            navigated = bool(link_pages)
+            if link_pages:
+                try:
+                    await client.call("Network.enable")
+                    await client.call(
+                        "Network.setExtraHTTPHeaders",
+                        {"headers": {"Referer": final_url}},
+                    )
+                except CaptureError:
+                    pass
+            for index, candidate in enumerate(link_pages, 1):
+                check()
+                label = candidate["title"] or candidate["url"]
+                report("links", f"保存链接 {index}/{len(link_pages)}：{label}")
+                try:
+                    entry = await self._capture_linked_page(
+                        client, candidate, destination, index, check
+                    )
+                except CaptureCancelled:
+                    raise
+                except Exception as error:
+                    entry = {
+                        "id": f"link-{index}",
+                        "url": candidate["url"],
+                        "requested_url": candidate["url"],
+                        "title": label,
+                        "file": None,
+                        "mode": "failed",
+                        "resources": 0,
+                        "failed": 1,
+                        "status": "failed",
+                        "error": str(error)[:200],
+                    }
+                sub_pages.append(entry)
+                if entry["status"] != "failed" and entry.get("file"):
+                    link_map[candidate["url"]] = entry["file"]
+                    if entry.get("url") and entry["url"] != candidate["url"]:
+                        link_map[entry["url"]] = entry["file"]
+
+            if link_pages:
+                try:
+                    await client.call("Page.navigate", {"url": final_url})
+                    await self._wait_ready(client, check)
+                except Exception:
+                    pass
+                check()
+
+            if link_map:
+                try:
+                    await asyncio.to_thread(
+                        rewrite_page_links,
+                        destination / "index.html",
+                        final_url,
+                        link_map,
+                    )
+                except OSError:
+                    pass
+
+            saved_links = {
+                entry["requested_url"]: entry["file"]
+                for entry in sub_pages
+                if entry["status"] != "failed" and entry.get("file")
+            }
+            links_out = []
+            for item in links:
+                entry = dict(item) if isinstance(item, dict) else {}
+                address = entry.get("url")
+                saved = saved_links.get(address)
+                if saved is None and isinstance(address, str):
+                    saved = saved_links.get(address.partition("#")[0])
+                if saved:
+                    entry["saved"] = saved
+                links_out.append(entry)
             report("links", "保存链接列表")
             await asyncio.to_thread(
                 (destination / "links.json").write_text,
-                json.dumps(links, ensure_ascii=False, indent=2) + "\n",
+                json.dumps(links_out, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
             )
             report("writing", "写入离线网页")
             manifest = created["manifest"]
+            main_entry = {
+                "id": "main",
+                "url": final_url,
+                "title": page_title,
+                "file": summary["file"],
+                "mode": summary.get("mode", "html"),
+                "status": "saved" if not summary.get("failed") else "partial",
+                "resources": summary.get("resources", 0),
+                "failed": summary.get("failed", 0),
+            }
+            failed_links = any(entry["status"] == "failed" for entry in sub_pages)
             manifest["title"] = page_title
             manifest["url"] = final_url
-            manifest["status"] = "saved" if not summary.get("failed") else "partial"
-            manifest["pages"] = [
-                {
-                    "id": "main",
-                    "url": final_url,
-                    "title": page_title,
-                    "file": summary["file"],
-                    "mode": summary.get("mode", "html"),
-                    "status": "saved" if not summary.get("failed") else "partial",
-                    "resources": summary.get("resources", 0),
-                    "failed": summary.get("failed", 0),
-                }
-            ]
+            manifest["status"] = (
+                "saved" if not summary.get("failed") and not failed_links else "partial"
+            )
+            manifest["pages"] = [main_entry] + sub_pages
             manifest["link_count"] = len(links)
+            manifest["link_pages"] = sum(
+                1 for entry in sub_pages if entry["status"] != "failed"
+            )
             await asyncio.to_thread(
                 self.library.write, self.directory, created["id"], manifest
             )
@@ -249,12 +415,23 @@ class PageCapture:
                 "resources": summary.get("resources", 0),
                 "failed": summary.get("failed", 0),
                 "links": len(links),
+                "link_pages": manifest["link_pages"],
             }
         except BaseException:
             if created is not None:
                 shutil.rmtree(created["directory"], ignore_errors=True)
+            if navigated and client is not None:
+                try:
+                    await client.call("Page.navigate", {"url": final_url})
+                except Exception:
+                    pass
             raise
         finally:
+            if restore_pending and client is not None:
+                try:
+                    await client.evaluate(RESTORE_LINKS_EXPRESSION)
+                except CaptureError:
+                    pass
             if socket is not None:
                 try:
                     await socket.close()
@@ -292,6 +469,70 @@ class PageCapture:
                 return
             await asyncio.sleep(0.3)
         raise CaptureError("网页加载超时")
+
+    async def _wait_navigation(self, client, check):
+        deadline = time.monotonic() + READY_TIMEOUT
+        while time.monotonic() < deadline:
+            check()
+            try:
+                state = await client.evaluate("document.readyState")
+                href = await client.evaluate("location.href")
+            except CaptureError:
+                state = None
+                href = None
+            if (
+                state == "complete"
+                and isinstance(href, str)
+                and href.startswith(("http://", "https://"))
+            ):
+                await asyncio.sleep(SETTLE_SECONDS)
+                return href
+            await asyncio.sleep(0.3)
+        raise CaptureError("链接页面加载超时")
+
+    async def _capture_linked_page(self, client, candidate, destination, index, check):
+        url = candidate["url"]
+        result = await client.call("Page.navigate", {"url": url})
+        if result.get("errorText"):
+            raise CaptureError(str(result["errorText"])[:200])
+        current = await self._wait_navigation(client, check)
+        check()
+        try:
+            await client.evaluate(LAZY_LOAD_EXPRESSION, await_promise=True)
+        except CaptureError:
+            pass
+        check()
+        title = ""
+        try:
+            title = await client.evaluate("(document.title || '').trim().slice(0, 300)")
+        except CaptureError:
+            pass
+        resolved_title = title or candidate.get("title") or current
+        subdir = Path(destination) / "pages" / str(index)
+        subdir.mkdir(parents=True, exist_ok=True)
+        summary = None
+        try:
+            snapshot = await client.call(
+                "Page.captureSnapshot", {"format": "mhtml"}, timeout=60
+            )
+            data = snapshot.get("data")
+            if not data:
+                raise CaptureError("页面快照为空")
+            summary = await asyncio.to_thread(convert_mhtml, data, subdir, current)
+        except Exception:
+            check()
+            summary = await self._screenshot(client, subdir, resolved_title, current)
+        return {
+            "id": f"link-{index}",
+            "url": current,
+            "requested_url": url,
+            "title": resolved_title,
+            "file": f"pages/{index}/index.html",
+            "mode": summary.get("mode", "html"),
+            "resources": summary.get("resources", 0),
+            "failed": summary.get("failed", 0),
+            "status": "partial" if summary.get("failed") else "saved",
+        }
 
     async def _screenshot(self, client, destination, title, url):
         width, height, scale = 1280.0, 720.0, 1.0

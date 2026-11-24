@@ -11,6 +11,7 @@ import { ReaderInput } from './reader-input';
 import { WebHeader, WEB_HEADER_HEIGHT } from './web-header';
 import { rememberPageTitle, rememberUrl, removeUrl } from '../lib/url-history';
 import { isLocalAppUrl, isLoopbackUrl } from '../lib/local-app';
+import { isOfflineCaptureActive } from '../lib/offline';
 import { UrlModal } from './url-modal';
 import { PhoneUrlModal } from './phone-url-modal';
 import { LocalFilesModal } from './local-files-modal';
@@ -447,8 +448,19 @@ export const PortalView = () => {
     { url, visible, sidebarVideoSpace, rightStickFullscreen, activePanel, pageTitle, pageTitleUrl },
     setGlobalState,
   ] = useGlobalState();
+  const [offlineCapture, setOfflineCapture] = useState(isOfflineCaptureActive);
+  useEffect(() => {
+    const timer = setInterval(() => setOfflineCapture(isOfflineCaptureActive()), 500);
+    return () => clearInterval(timer);
+  }, []);
   const readerVisible =
-    !!url && visible && !activePanel && !dropdownOpen && !steamBlockingUI && qamOpen;
+    !!url &&
+    visible &&
+    !activePanel &&
+    !dropdownOpen &&
+    !steamBlockingUI &&
+    qamOpen &&
+    !offlineCapture;
   const closePanel = () =>
     setGlobalState((state) => ({ ...state, activePanel: undefined, visible: true }));
   const Panel = activePanel

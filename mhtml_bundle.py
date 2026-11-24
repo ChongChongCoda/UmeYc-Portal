@@ -97,8 +97,42 @@ def _resolver(mapping, base):
     return resolve
 
 
-def _rewrite_html(html, resolve):
+def _link_resolver(link_map, base):
+    if not link_map:
+        return None
+
+    def resolve(value):
+        value = value.strip()
+        if not value or value.startswith("#") or value.lower().startswith(SKIP_PREFIXES):
+            return None
+        try:
+            absolute = urljoin(base, unescape(value))
+            if urlsplit(absolute).scheme not in {"http", "https"}:
+                return None
+            address, _, fragment = absolute.partition("#")
+        except ValueError:
+            return None
+        for candidate in _url_candidates(address):
+            relative = link_map.get(candidate)
+            if relative:
+                return relative + (f"#{fragment}" if fragment else "")
+        return None
+
+    return resolve
+
+
+def _rewrite_html(html, resolve, resolve_link=None):
     def attribute(match):
+        if (
+            resolve_link is not None
+            and match.group("name").lower() == "href"
+        ):
+            linked = resolve_link(match.group("value"))
+            if linked is not None:
+                return (
+                    f'{match.group("name")}{match.group("sep")}{match.group("quote")}'
+                    f'{escape(linked, quote=True)}{match.group("quote")}'
+                )
         local = resolve(match.group("value"))
         if local is None:
             return match.group(0)
@@ -260,3 +294,20 @@ def convert_mhtml(payload, destination, page_url):
         "failed": failed,
         "mode": "html",
     }
+
+
+def rewrite_page_links(path, page_url, link_map):
+    """Point saved article anchors at their local subpage copies.
+
+    Resource references are left untouched; only href values present in
+    ``link_map`` are rewritten.
+    """
+    resolve_link = _link_resolver(link_map, page_url)
+    if resolve_link is None:
+        return 0
+    path = Path(path)
+    html = path.read_text(encoding="utf-8")
+    rewritten = _rewrite_html(html, lambda _value: None, resolve_link)
+    if rewritten != html:
+        path.write_text(rewritten, encoding="utf-8")
+    return sum(1 for value in link_map if value in html)

@@ -1,4 +1,4 @@
-import { callable } from '@decky/api';
+import { callable, toaster } from '@decky/api';
 
 export interface OfflineCollection {
   id: string;
@@ -38,10 +38,59 @@ export interface OfflineSaveStatus {
     resources: number;
     failed: number;
     links: number;
+    link_pages?: number;
   } | null;
   started_at: number;
   finished_at: number | null;
 }
+
+let captureActive = false;
+const CAPTURE_WATCH_LIMIT_MS = 15 * 60 * 1000;
+
+export const isOfflineCaptureActive = (): boolean => captureActive;
+
+/**
+ * Keep the portal hidden while the backend navigates through linked pages.
+ * The browser has to stay alive for CDP capture, but its URL changes must not
+ * leak into history or the visible reader.
+ */
+export const watchOfflineSave = (): void => {
+  if (captureActive) return;
+  captureActive = true;
+  const deadline = Date.now() + CAPTURE_WATCH_LIMIT_MS;
+  let failures = 0;
+  const tick = async () => {
+    try {
+      const status = await getOfflineSaveStatus();
+      failures = 0;
+      if (!status || status.status !== 'running' || Date.now() > deadline) {
+        captureActive = false;
+        if (status?.status === 'done') {
+          const pages = status.collection?.link_pages;
+          toaster.toast({
+            title: '离线保存完成',
+            body: `${status.collection?.title || '网页'}${
+              pages ? `（含 ${pages} 个链接页面）` : ''
+            }`,
+          });
+        } else if (status?.status === 'error') {
+          toaster.toast({ title: '离线保存失败', body: status.message });
+        } else if (status?.status === 'cancelled') {
+          toaster.toast({ title: '已取消离线保存', body: '' });
+        }
+        return;
+      }
+    } catch {
+      failures += 1;
+      if (failures >= 15 || Date.now() > deadline) {
+        captureActive = false;
+        return;
+      }
+    }
+    setTimeout(() => void tick(), 1000);
+  };
+  void tick();
+};
 
 export const saveOfflinePage = callable<
   [url: string, title: string, directory: string],

@@ -3,7 +3,7 @@ import { DialogButton, ModalRootProps } from '@decky/ui';
 import { useEffect, useRef, useState } from 'react';
 import { PanelDialog } from './panel-dialog';
 import { FolderPicker } from './folder-picker';
-import { OFFLINE_AUTO_KEY, saveOfflinePage } from '../lib/offline';
+import { OFFLINE_AUTO_KEY, saveOfflinePage, watchOfflineSave } from '../lib/offline';
 
 import { useGlobalState } from '../hooks/global-state';
 import {
@@ -69,6 +69,7 @@ export const PhoneUrlModal = (props: ModalRootProps) => {
           ) {
             void saveOfflinePage(result.url, '', localStorage.getItem(UPLOAD_DIRECTORY_KEY) || '')
               .then(() => {
+                watchOfflineSave();
                 toaster.toast({
                   title: '已开始离线保存',
                   body: '可在「本地文件 → 离线网页」查看进度。',

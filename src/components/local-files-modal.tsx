@@ -673,7 +673,11 @@ export const LocalFilesModal = (props: ModalRootProps) => {
           {saveStatus?.status === 'error' && <p role="alert">离线保存失败：{saveStatus.message}</p>}
           {saveStatus?.status === 'done' && saveStatus.collection && (
             <div style={{ fontSize: 12, opacity: 0.75 }}>
-              已保存离线网页「{saveStatus.collection.title}」。
+              已保存离线网页「{saveStatus.collection.title}」
+              {saveStatus.collection.link_pages
+                ? `，包含 ${saveStatus.collection.link_pages} 个链接页面`
+                : ''}
+              。
             </div>
           )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from main import Plugin
-from web_capture import CaptureCancelled, SaveJob
+from web_capture import CaptureCancelled, SaveJob, _link_pages
 
 
 class FakeCapture:
@@ -57,6 +57,40 @@ class SaveJobTests(unittest.IsolatedAsyncioTestCase):
         job.cancel()
         await job.run()
         self.assertEqual(job.snapshot()['status'], 'cancelled')
+
+
+class LinkSelectionTests(unittest.TestCase):
+    def test_selects_only_xiaoheihe_article_links_once(self):
+        links = [
+            {"url": "https://www.xiaoheihe.cn/app/bbs/link/1", "title": "一"},
+            {"url": "https://www.xiaoheihe.cn/app/bbs/post/2?x=1", "title": "二"},
+            {"url": "https://www.xiaoheihe.cn/app/bbs/link/1", "title": "重复"},
+            {"url": "https://www.xiaoheihe.cn/app/bbs/link/3#part", "title": "三"},
+            {"url": "https://www.xiaoheihe.cn/user/1", "title": "个人"},
+            {"url": "https://evil.example/app/bbs/link/4", "title": "外部"},
+            {"url": "https://www.xiaoheihe.cn/app/bbs/link/196297922", "title": "当前页"},
+        ]
+        selected = _link_pages(
+            links, "https://www.xiaoheihe.cn/app/bbs/link/196297922")
+        self.assertEqual(
+            [item["url"] for item in selected],
+            [
+                "https://www.xiaoheihe.cn/app/bbs/link/1",
+                "https://www.xiaoheihe.cn/app/bbs/post/2?x=1",
+                "https://www.xiaoheihe.cn/app/bbs/link/3",
+            ],
+        )
+
+    def test_does_not_crawl_other_sites(self):
+        links = [{"url": "https://www.xiaoheihe.cn/app/bbs/link/1"}]
+        self.assertEqual(_link_pages(links, "https://example.com/guide"), [])
+
+    def test_caps_the_number_of_linked_pages(self):
+        links = [
+            {"url": f"https://www.xiaoheihe.cn/app/bbs/link/{index}"}
+            for index in range(40)
+        ]
+        self.assertEqual(len(_link_pages(links, "https://www.xiaoheihe.cn/app/bbs/link/0")), 30)
 
 
 class PluginOfflineSaveTests(unittest.IsolatedAsyncioTestCase):

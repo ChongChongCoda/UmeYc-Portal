@@ -3,7 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from mhtml_bundle import convert_mhtml, wrap_screenshot
+from mhtml_bundle import convert_mhtml, rewrite_page_links, wrap_screenshot
 
 
 PAGE_URL = "https://example.com/guide"
@@ -121,6 +121,26 @@ class MhtmlBundleTests(unittest.TestCase):
         ).encode("utf-8")
         with self.assertRaises(ValueError):
             convert_mhtml(mhtml, self.destination, PAGE_URL)
+
+    def test_rewrites_only_mapped_article_links(self):
+        path = self.destination / "index.html"
+        path.write_text(
+            '<html><body>'
+            '<a href="https://www.xiaoheihe.cn/app/bbs/link/1">一</a>'
+            '<a href="https://www.xiaoheihe.cn/app/bbs/link/2">二</a>'
+            '<img src="assets/a.png">'
+            "</body></html>",
+            encoding="utf-8",
+        )
+        rewrite_page_links(
+            path,
+            "https://www.xiaoheihe.cn/app/bbs/link/196297922",
+            {"https://www.xiaoheihe.cn/app/bbs/link/1": "pages/1/index.html"},
+        )
+        html = path.read_text(encoding="utf-8")
+        self.assertIn('href="pages/1/index.html"', html)
+        self.assertIn('href="https://www.xiaoheihe.cn/app/bbs/link/2"', html)
+        self.assertIn('src="assets/a.png"', html)
 
     def test_screenshot_wrapper_escapes_title_and_filename(self):
         html = wrap_screenshot('page"1.png', '<攻略>')
