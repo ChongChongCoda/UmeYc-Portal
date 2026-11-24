@@ -17,6 +17,7 @@ import socketserver
 import sys
 import threading
 import time
+import traceback
 from urllib.parse import urlsplit
 
 # Decky loads main.py by filename rather than importing a plugin package.
@@ -28,7 +29,7 @@ from local_library import LocalLibrary
 from offline_server import OfflineServer
 from offline_store import OfflineLibrary
 from storage_migration import StorageMigration, plan_migration
-from update_checker import UpdateError, check_and_download
+from update_checker import UpdateError, check_and_download, diagnostics
 from web_capture import CaptureError, PageCapture, SaveJob, inject_search
 from web_scroll import WebScroller
 
@@ -576,5 +577,18 @@ class Plugin:
     async def check_plugin_update(self):
         try:
             return await asyncio.to_thread(check_and_download)
-        except UpdateError as error:
-            raise ValueError(str(error)) from error
+        except Exception as error:
+            detail = traceback.format_exc()
+            report = DIAGNOSTIC_ROOT / "umeyc-update-error.txt"
+            try:
+                report.write_text(
+                    f"{detail}\n\n{diagnostics()}\n", encoding="utf-8")
+            except OSError:
+                pass
+            message = str(error) or type(error).__name__
+            return {
+                "status": "error",
+                "message": message,
+                "detail": detail[-4000:],
+                "report": str(report),
+            }

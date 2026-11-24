@@ -18,6 +18,7 @@ import {
   PendingUpdate,
   UPDATE_CHECK_AT_KEY,
   UPDATE_CHECK_INTERVAL_MS,
+  UPDATE_ERROR_KEY,
   UPDATE_READY_KEY,
 } from '../lib/updates';
 import { useGlobalState } from '../hooks/global-state';
@@ -34,11 +35,14 @@ export const Settings = () => {
   const [updateNotice, setUpdateNotice] = useState(() => {
     try {
       const raw = localStorage.getItem(UPDATE_READY_KEY);
-      if (!raw) return '';
-      const pending = JSON.parse(raw) as PendingUpdate;
-      return pending.version && pending.path
-        ? `已下载 ${pending.version}：${pending.path}。请到 Decky 设置 → 从 ZIP 文件安装。`
-        : '';
+      if (raw) {
+        const pending = JSON.parse(raw) as PendingUpdate;
+        if (pending.version && pending.path) {
+          return `已下载 ${pending.version}：${pending.path}。请到 Decky 设置 → 从 ZIP 文件安装。`;
+        }
+      }
+      const error = localStorage.getItem(UPDATE_ERROR_KEY);
+      return error ? `上次更新检查失败：${error}` : '';
     } catch {
       return '';
     }
@@ -65,6 +69,18 @@ export const Settings = () => {
     try {
       const result = await checkPluginUpdate();
       if (!mountedRef.current) return;
+      if (result.status === 'error') {
+        const message = result.message || '未知错误';
+        localStorage.setItem(UPDATE_ERROR_KEY, message);
+        setUpdateNotice(
+          `更新检查失败：${message}${
+            result.report ? `；详情见 ${result.report}` : ''
+          }`,
+        );
+        toaster.toast({ title: '检查更新失败', body: message });
+        return;
+      }
+      localStorage.removeItem(UPDATE_ERROR_KEY);
       if (result.status === 'downloaded' || result.status === 'ready') {
         const version = result.version || '新版本';
         const path = result.path || '/home/deck/Downloads/UmeYc-Portal.zip';
@@ -88,8 +104,13 @@ export const Settings = () => {
         }
       }
     } catch (error) {
+      const message = String(error);
+      if (mountedRef.current) {
+        localStorage.setItem(UPDATE_ERROR_KEY, message);
+        setUpdateNotice(`更新检查失败：${message}`);
+      }
       if (manual) {
-        toaster.toast({ title: '检查更新失败', body: String(error) });
+        toaster.toast({ title: '检查更新失败', body: message });
       }
     } finally {
       updatingRef.current = false;
@@ -212,7 +233,9 @@ export const Settings = () => {
         </PanelSectionRow>
         {updateNotice && (
           <PanelSectionRow>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>{updateNotice}</div>
+            <div style={{ fontSize: 12, opacity: 0.75, wordBreak: 'break-word' }}>
+              {updateNotice}
+            </div>
           </PanelSectionRow>
         )}
         <PanelSectionRow>

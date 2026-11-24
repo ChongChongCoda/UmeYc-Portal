@@ -359,4 +359,28 @@ describe('Settings', () => {
       ),
     );
   });
+
+  it('keeps a returned update error visible with the report path', async () => {
+    checkPluginUpdateMock.mockResolvedValueOnce({
+      status: 'error',
+      message: '无法下载更新包，请检查 Deck 网络后重试',
+      report: '/home/deck/umeyc-update-error.txt',
+    });
+    const state = createState(ViewMode.Sidebar);
+    vi.mocked(useGlobalState).mockReturnValue([state, vi.fn(), {}] as never);
+    render(<Settings />);
+    fireEvent.click(screen.getByText('检查并下载更新'));
+    await waitFor(() =>
+      expect(
+        screen.getByText(/更新检查失败：无法下载更新包/),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/umeyc-update-error\.txt/)).toBeInTheDocument();
+    expect(toaster.toast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: '检查更新失败',
+        body: '无法下载更新包，请检查 Deck 网络后重试',
+      }),
+    );
+  });
 });

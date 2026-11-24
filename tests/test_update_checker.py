@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 from zipfile import ZipFile, ZIP_DEFLATED
 
+import update_checker
 from update_checker import (
     UpdateError,
     _release_from_payload,
@@ -137,6 +138,30 @@ class DownloadFlowTests(unittest.TestCase):
             self.assertTrue(result["replaced"])
             self.assertEqual(validate_zip(target), "1.0.0-zh-cn.37")
             self.assertFalse((Path(directory) / "UmeYc-Portal.zip.part").exists())
+
+    def test_download_retries_without_the_environment_proxy(self):
+        with TemporaryDirectory() as directory:
+            part = Path(directory) / "UmeYc-Portal.zip.part"
+            calls = []
+
+            def download(_url, target, expected, direct):
+                calls.append(direct)
+                if not direct:
+                    raise OSError("stale proxy")
+                write_package(target, "1.0.0-zh-cn.37")
+                return target.stat().st_size, "1.0.0-zh-cn.37"
+
+            with patch("update_checker._download_once", side_effect=download):
+                size, version = update_checker._fetch_to_part(
+                    "https://github.com/x", part)
+            self.assertEqual(calls, [False, True])
+            self.assertEqual(version, "1.0.0-zh-cn.37")
+            self.assertEqual(size, part.stat().st_size)
+
+    def test_wraps_unexpected_errors_as_update_errors(self):
+        with patch("update_checker.current_version", side_effect=RuntimeError("boom")):
+            with self.assertRaisesRegex(UpdateError, "RuntimeError: boom"):
+                check_and_download()
 
     def test_fallback_download_does_not_replace_an_older_zip_with_an_equal_one(self):
         with TemporaryDirectory() as directory:
