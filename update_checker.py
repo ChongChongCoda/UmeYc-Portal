@@ -5,6 +5,7 @@ the previous UmeYc-Portal.zip, and leaves installation to Decky's ZIP picker.
 """
 
 import http.client
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -72,6 +73,38 @@ def downloads_directory():
     return Path(home) / "Downloads"
 
 
+_ssl_context = None
+
+
+def _ca_files():
+    files = []
+    try:
+        import certifi
+        files.append(certifi.where())
+    except Exception:
+        pass
+    files.extend([
+        "/etc/ssl/certs/ca-certificates.crt",
+        "/etc/ssl/cert.pem",
+        "/usr/lib/ssl/cert.pem",
+        "/usr/local/etc/openssl/cert.pem",
+    ])
+    return [path for path in files if path and os.path.isfile(path)]
+
+
+def _get_ssl_context():
+    global _ssl_context
+    if _ssl_context is None:
+        context = ssl.create_default_context()
+        for cafile in _ca_files():
+            try:
+                context.load_verify_locations(cafile=cafile)
+            except (OSError, ssl.SSLError):
+                pass
+        _ssl_context = context
+    return _ssl_context
+
+
 def _open(url, headers=None, timeout=API_TIMEOUT, direct=False):
     request = urllib.request.Request(
         url,
@@ -81,12 +114,26 @@ def _open(url, headers=None, timeout=API_TIMEOUT, direct=False):
             **(headers or {}),
         },
     )
-    if direct:
-        # Decky's service environment may carry a stale proxy that the desktop
-        # shell does not have. Retry GitHub directly once before giving up.
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        return opener.open(request, timeout=timeout)
-    return urllib.request.urlopen(request, timeout=timeout)
+    # Decky's bundled Python can miss the system CA bundle, and Decky's service
+    # environment may carry a stale proxy that the desktop shell does not have.
+    handlers = [urllib.request.HTTPSHandler(context=_get_ssl_context())]
+    handlers.append(urllib.request.ProxyHandler({} if direct else None))
+    opener = urllib.request.build_opener(*handlers)
+    return opener.open(request, timeout=timeout)
+
+
+def github_resolves_to_loopback():
+    try:
+        infos = socket.getaddrinfo("github.com", 443, type=socket.SOCK_STREAM)
+    except Exception:
+        return False
+    addresses = []
+    for info in infos:
+        try:
+            addresses.append(ipaddress.ip_address(info[4][0]))
+        except ValueError:
+            continue
+    return bool(addresses) and all(address.is_loopback for address in addresses)
 
 
 def diagnostics():
@@ -100,6 +147,25 @@ def diagnostics():
         lines.append(f"version: {current_version()}")
     except Exception as error:
         lines.append(f"version: {type(error).__name__}: {error}")
+    try:
+        paths = ssl.get_default_verify_paths()
+        lines.append(
+            f"ssl paths: cafile={paths.cafile} capath={paths.capath} "
+            f"openssl={paths.openssl_cafile}"
+        )
+    except Exception as error:
+        lines.append(f"ssl paths: {type(error).__name__}: {error}")
+    try:
+        import certifi
+        lines.append(f"certifi: {certifi.where()}")
+    except Exception:
+        lines.append("certifi: unavailable")
+    try:
+        with open("/etc/hosts", encoding="utf-8") as handle:
+            entries = [line.strip() for line in handle if "github" in line.lower()]
+        lines.append(f"hosts github: {' | '.join(entries) if entries else 'none'}")
+    except OSError:
+        lines.append("hosts github: unreadable")
     for key in sorted(os.environ):
         if "proxy" not in key.lower():
             continue
@@ -250,7 +316,13 @@ def _fetch_to_part(url, part, expected_version=None):
             part.unlink(missing_ok=True)
     if isinstance(last, UpdateError):
         raise last
-    raise UpdateError("无法下载更新包，请检查 Deck 网络后重试") from last
+    hint = ""
+    if github_resolves_to_loopback():
+        hint = (
+            "；检测到 github.com 被本机 hosts/代理指向 127.0.0.1，"
+            "请启动对应代理工具或在 /etc/hosts 中移除 GitHub 条目后重试"
+        )
+    raise UpdateError("无法下载更新包，请检查 Deck 网络后重试" + hint) from last
 
 
 def check_and_download():
