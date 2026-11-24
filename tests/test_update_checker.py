@@ -144,7 +144,7 @@ class DownloadFlowTests(unittest.TestCase):
             part = Path(directory) / "UmeYc-Portal.zip.part"
             calls = []
 
-            def download(_url, target, expected, direct):
+            def download(_url, target, expected, direct, _deadline):
                 calls.append(direct)
                 if not direct:
                     raise OSError("stale proxy")

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ComponentProps, ReactNode } from 'react';
 
 import { Settings } from './settings';
@@ -110,6 +110,27 @@ describe('Settings', () => {
     for (const label of ['布局', '展开', '控制栏', '位置', '大小', '边距']) {
       expect(screen.queryByLabelText(label)).toBeNull();
       expect(screen.queryByText(label)).toBeNull();
+    }
+  });
+
+  it('times out a stuck update check and reports it', async () => {
+    vi.useFakeTimers();
+    try {
+      localStorage.setItem(UPDATE_CHECK_AT_KEY, String(Date.now()));
+      checkPluginUpdateMock.mockImplementation(() => new Promise(() => undefined));
+      vi.mocked(useGlobalState).mockReturnValue([createState(ViewMode.Sidebar), vi.fn(), {}] as never);
+
+      render(<Settings />);
+      fireEvent.click(screen.getByText('检查并下载更新'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(110000);
+      });
+
+      expect(toaster.toast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '检查更新失败', body: expect.stringContaining('超时') }),
+      );
+    } finally {
+      vi.useRealTimers();
     }
   });
 

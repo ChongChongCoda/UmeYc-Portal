@@ -32,6 +32,7 @@ VERSION_PATTERN = re.compile(r"-zh-cn\.(\d+)$")
 MAX_BYTES = 20 * 1024 * 1024
 API_TIMEOUT = 10
 DOWNLOAD_TIMEOUT = 60
+TOTAL_TIMEOUT = 75
 ALLOWED_HOSTS = {
     "github.com",
     "api.github.com",
@@ -271,7 +272,7 @@ def validate_zip(path):
     return version
 
 
-def _download_once(url, part, expected_version, direct):
+def _download_once(url, part, expected_version, direct, deadline):
     part.unlink(missing_ok=True)
     size = 0
     with _open(url, headers={"Accept": "application/octet-stream"},
@@ -288,6 +289,8 @@ def _download_once(url, part, expected_version, direct):
                 pass
         with part.open("wb") as handle:
             while True:
+                if time.monotonic() > deadline:
+                    raise UpdateError("检查更新超时，请检查 Deck 网络后重试")
                 chunk = response.read(64 * 1024)
                 if not chunk:
                     break
@@ -306,11 +309,15 @@ def _download_once(url, part, expected_version, direct):
 def _fetch_to_part(url, part, expected_version=None):
     part.parent.mkdir(parents=True, exist_ok=True)
     last = None
+    deadline = time.monotonic() + TOTAL_TIMEOUT
     # First use the environment's proxy (if any), then retry without it. Decky
     # may inherit a stale proxy that the desktop shell does not have.
     for direct in (False, True):
+        if time.monotonic() > deadline:
+            last = UpdateError("检查更新超时，请检查 Deck 网络后重试")
+            break
         try:
-            return _download_once(url, part, expected_version, direct)
+            return _download_once(url, part, expected_version, direct, deadline)
         except Exception as error:
             last = error
             part.unlink(missing_ok=True)
@@ -337,64 +344,74 @@ def check_and_download():
 
 
 def _check_and_download():
-    with _lock:
-        current = current_version()
-        current_number = version_number(current)
-        if current_number is None:
-            raise UpdateError("无法识别当前插件版本")
-        release = latest_release()
-        if (
-            release["number"] is not None
-            and release["number"] <= current_number
-        ):
+    # A stuck DNS lookup or slow mirror must not queue every later check behind
+    # it; fail fast while a check is already running.
+    if not _lock.acquire(blocking=False):
+        raise UpdateError("已有更新检查正在进行，请稍候")
+    try:
+        return _run_check()
+    finally:
+        _lock.release()
+
+
+def _run_check():
+    current = current_version()
+    current_number = version_number(current)
+    if current_number is None:
+        raise UpdateError("无法识别当前插件版本")
+    release = latest_release()
+    if (
+        release["number"] is not None
+        and release["number"] <= current_number
+    ):
+        return {
+            "status": "latest",
+            "current": current,
+            "version": release["version"],
+        }
+
+    target = downloads_directory() / ASSET_NAME
+    if release["number"] is not None and target.is_file():
+        try:
+            existing = validate_zip(target)
+        except UpdateError:
+            existing = None
+        if existing == release["version"]:
+            return {
+                "status": "ready",
+                "current": current,
+                "version": existing,
+                "path": str(target),
+                "size": target.stat().st_size,
+                "replaced": False,
+            }
+
+    part = target.with_name(target.name + ".part")
+    try:
+        size, version = _fetch_to_part(
+            release["url"], part, expected_version=release["version"])
+        downloaded_number = version_number(version)
+        if downloaded_number is None or downloaded_number <= current_number:
+            part.unlink(missing_ok=True)
             return {
                 "status": "latest",
                 "current": current,
-                "version": release["version"],
-            }
-
-        target = downloads_directory() / ASSET_NAME
-        if release["number"] is not None and target.is_file():
-            try:
-                existing = validate_zip(target)
-            except UpdateError:
-                existing = None
-            if existing == release["version"]:
-                return {
-                    "status": "ready",
-                    "current": current,
-                    "version": existing,
-                    "path": str(target),
-                    "size": target.stat().st_size,
-                    "replaced": False,
-                }
-
-        part = target.with_name(target.name + ".part")
-        try:
-            size, version = _fetch_to_part(
-                release["url"], part, expected_version=release["version"])
-            downloaded_number = version_number(version)
-            if downloaded_number is None or downloaded_number <= current_number:
-                part.unlink(missing_ok=True)
-                return {
-                    "status": "latest",
-                    "current": current,
-                    "version": version,
-                }
-            replaced = target.exists()
-            target.unlink(missing_ok=True)
-            os.replace(part, target)
-            return {
-                "status": "downloaded",
-                "current": current,
                 "version": version,
-                "path": str(target),
-                "size": size,
-                "replaced": replaced,
             }
-        except UpdateError:
-            part.unlink(missing_ok=True)
-            raise
-        except (OSError, urllib.error.URLError) as error:
-            part.unlink(missing_ok=True)
-            raise UpdateError("无法下载更新包，请检查 Deck 网络后重试") from error
+        replaced = target.exists()
+        target.unlink(missing_ok=True)
+        os.replace(part, target)
+        return {
+            "status": "downloaded",
+            "current": current,
+            "version": version,
+            "path": str(target),
+            "size": size,
+            "replaced": replaced,
+        }
+    except UpdateError:
+        part.unlink(missing_ok=True)
+        raise
+    except (OSError, urllib.error.URLError) as error:
+        part.unlink(missing_ok=True)
+        raise UpdateError("无法下载更新包，请检查 Deck 网络后重试") from error

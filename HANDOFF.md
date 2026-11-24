@@ -1,6 +1,6 @@
 # UmeYc-Portal 交接文档
 
-> 更新时间：2026-11-24 · 当前版本：`1.0.0-zh-cn.47`（最新提交见 `git log`）
+> 更新时间：2026-11-24 · 当前版本：`1.0.0-zh-cn.48`（最新提交见 `git log`）
 >
 > **给接手的 Claude：** 先读仓库根的 `README.md`，按它顶部的阅读顺序接手；本文件是第 2 步，也是实际进度、待办、构建/发布流程和踩坑记录的权威来源。用户使用简体中文交流。
 >
@@ -15,7 +15,7 @@
 - 上游 fork：<https://github.com/xiaochaom/UmeYc-Portal>（又来自 `ajustinjames/decky-portal`，稳定基线 `v0.1.1`）
 - 本地主分支：`main`；远程 `origin` 指向上面的 fork，`upstream` 指向上游。
 - 发布方式：GitHub Releases，标签格式 `fork-1.0.0-zh-cn.NN`；资产固定名为 `UmeYc-Portal.zip`。
-- 最新 Release：<https://github.com/ChongChongCoda/UmeYc-Portal/releases/tag/fork-1.0.0-zh-cn.47>
+- 最新 Release：<https://github.com/ChongChongCoda/UmeYc-Portal/releases/tag/fork-1.0.0-zh-cn.48>
 - 直链：`https://github.com/ChongChongCoda/UmeYc-Portal/releases/latest/download/UmeYc-Portal.zip`
 - 交接包内已带构建产物：`out/UmeYc-Portal.zip`（633,573 字节，与 .42 Release 资产一致）。
 
@@ -47,6 +47,7 @@
 18. **手机版网页（.46）**：设置页开关；开启后 `WebScroller` 对当前页设置 Android Chrome UA、触摸模拟和移动视口并刷新一次，站点切到移动版；每次重连后重新应用，关闭时恢复桌面 UA 并刷新。状态存 `portal.mobileWeb`。
 19. **缩放不留白（.46）**：`assets/web-zoom.js` 在首次缩放前记录占满视口的容器，缩小时给它们设置 `min-height: calc(100vh / 缩放比例)`，抵消 CSS zoom 不改变 `vh` 的问题；恢复默认时还原。
 20. **手机版下禁用缩放（.47）**：手机版页面的媒体查询会被 CSS zoom 破坏，缩放后无法用「默认」可靠恢复。手机版开启时隐藏网页标题栏的缩放按钮，L1/R1/L3 不再发送缩放，后端 `WebScroller.zoom()` 也直接拒绝；R3 视频全屏不受影响。关闭手机版后恢复缩放。
+21. **更新检查不会无限卡住（.48）**：`update_checker.py` 增加 75 秒总下载期限与非阻塞任务锁（重复请求立即返回「已有更新检查正在进行」）；`main.py` 用 95 秒 `wait_for` 包住检查；设置页再加 110 秒兜底超时，并在检查进行中点击按钮时提示「正在检查更新」。
 
 ### 2.2 最近提交
 
@@ -70,15 +71,15 @@ a313341 Add smartphone-style touch gestures to the local atlas
 - Deck 实机已确认：自动更新检查成功（.39）、Steam 键盘地图搜索通过（.40）、.42 可安装。
 - **实机反馈（.42/.44）**：扫码后离线保存报「等待网页加载超时」、插件卸载后窗口残留，已在 .43 修复；.44 的悬浮「攻略」按钮被否决，.45 改为随插件页显示/返回即收起。
 - **.45 实机确认（2026-11-24）**：点开插件页显示、返回插件列表自动收起，用户确认可用。
-- **尚未实机确认**：.41 小黑盒一级链接全流程；.42 的缩放修复和断网自动打开离线副本；.43 的两项修复（离线短链保存、卸载窗口清理）；.46 的手机版与缩放留白修复；.47 手机版下隐藏缩放。
+- **尚未实机确认**：.41 小黑盒一级链接全流程；.42 的缩放修复和断网自动打开离线副本；.43 的两项修复（离线短链保存、卸载窗口清理）；.46 的手机版与缩放留白修复；.47 手机版下隐藏缩放；.48 更新检查超时。
 
 ---
 
 ## 3. 下一步：实机验证（最重要）
 
-### 3.1 验证 .47
+### 3.1 验证 .48
 
-1. 安装 .47：设置页「检查并下载更新」→ Decky「从 ZIP 文件安装插件」→ 选 `/home/deck/Downloads/UmeYc-Portal.zip`。
+1. 安装 .48：设置页「检查并下载更新」→ Decky「从 ZIP 文件安装插件」→ 选 `/home/deck/Downloads/UmeYc-Portal.zip`。
 2. **手机版网页**：设置页打开「手机版网页」→ 当前网页刷新一次；B 站等站点应切到 `m.` 移动版。手机版下右上角缩放按钮应消失，按 L1/R1/L3 不应改变比例；关闭开关 → 恢复桌面版、刷新一次并恢复缩放按钮。
 3. **缩放留白**：在 B 站/小黑盒这类整屏页面上连续点「缩小」→ 底部不应出现大片空白；点「默认」→ 恢复原样。
 4. **随插件页显示**：已在 .45 实机确认（点开显示、返回收起）。
@@ -86,7 +87,8 @@ a313341 Add smartphone-style touch gestures to the local atlas
 6. 点网页右上角缩小/默认/放大：**不应再出现 Python 异常**。
 7. 关闭 Wi‑Fi，从「网页」历史点击同一个网址：应提示「已打开离线副本」并显示本地页面。
 8. 在 Portal 打开时卸载/重载插件：**阅读器窗口应立即消失**；若仍残留，记录是否有 `window.portal` 及 Decky 版本。
-9. 也可从「本地文件 → 离线网页」直接打开；删除集合时应连同 `pages/` 一起删除。
+9. **更新检查超时**：断网或 GitHub 不可达时，检查最多约 95 秒应给出失败/超时提示，按钮恢复可点；再次点击应提示「正在检查更新」而不是无反应。
+10. 也可从「本地文件 → 离线网页」直接打开；删除集合时应连同 `pages/` 一起删除。
 
 如果第 2 步失败：记录站点是否跳转到 `m.` 域名、页面是否刷新、`/home/deck/homebrew/logs/UmeYc-Portal/<时间>.log`。
 如果第 3 步仍留白：记录站点和页面结构（是否为固定高度容器），必要时把 `assets/web-zoom.js` 的容器判定条件放宽。
@@ -161,7 +163,7 @@ Windows 上 `tests.test_local_files` / `test_local_library` / `test_phone_input`
 
 ### 5.1 版本号
 
-- `package.json` 的 `version`：如 `1.0.0-zh-cn.47`。
+- `package.json` 的 `version`：如 `1.0.0-zh-cn.48`。
 - `README.md` 的「当前版本」同步更新。
 - `plugin.json` **没有** version 字段，不要加。
 - `scripts/package.py` 使用 `plugin.json` 的 `name` 作为 ZIP 名。
@@ -179,17 +181,17 @@ python scripts/package.py
 # 2. 提交 + tag
 git add -A
 git commit -m "…"
-git tag fork-1.0.0-zh-cn.47
+git tag fork-1.0.0-zh-cn.48
 
 # 3. 推送（旧机需要 https_proxy；新机直连可用）
 git push origin main
-git push origin fork-1.0.0-zh-cn.47
+git push origin fork-1.0.0-zh-cn.48
 
 # 4. 创建 Release（注意 --repo，默认可能解析到上游）
 #    新机 gh 不在 PATH：export PATH="/c/Program Files/GitHub CLI:$PATH"
-gh release create fork-1.0.0-zh-cn.47 out/UmeYc-Portal.zip \
+gh release create fork-1.0.0-zh-cn.48 out/UmeYc-Portal.zip \
   --repo ChongChongCoda/UmeYc-Portal \
-  --title "UmeYc-Portal 1.0.0-zh-cn.47" --latest \
+  --title "UmeYc-Portal 1.0.0-zh-cn.48" --latest \
   --notes "更新说明…"
 ```
 
@@ -289,6 +291,7 @@ curl -s https://api.github.com/repos/ChongChongCoda/UmeYc-Portal/releases/latest
 - `.45` 改为随插件页显示：`titleView` 标记检测当前是否在插件页，返回插件列表即收起；移除 `collapsed` / `manualVisible` 与悬浮按钮。
 - `.46` 新增设置页「手机版网页」（Android UA + 触摸 + 移动视口，切换时刷新）；修复缩小时固定高度页面底部留白（`web-zoom.js` 拉伸整屏容器）。
 - `.47` 手机版开启时隐藏/禁用网页缩放（前端按钮、L1/R1/L3 与后端 `zoom()`），避免 CSS zoom 破坏移动版比例；关闭手机版恢复。
+- `.48` 更新检查增加 75/95/110 秒三层超时与非阻塞锁，修复「一直显示正在检查」；检查中再次点击会提示等待。
 
 ---
 

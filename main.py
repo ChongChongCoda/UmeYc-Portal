@@ -579,7 +579,19 @@ class Plugin:
 
     async def check_plugin_update(self):
         try:
-            return await asyncio.to_thread(check_and_download)
+            # Bound the whole check: a blocked DNS lookup can outlive the
+            # socket timeouts and would otherwise leave the settings button
+            # spinning forever.
+            return await asyncio.wait_for(
+                asyncio.to_thread(check_and_download), timeout=95
+            )
+        except asyncio.TimeoutError:
+            return {
+                "status": "error",
+                "message": "检查更新超时，请检查 Deck 网络后重试",
+                "detail": "",
+                "report": "",
+            }
         except Exception as error:
             detail = traceback.format_exc()
             report = DIAGNOSTIC_ROOT / "umeyc-update-error.txt"

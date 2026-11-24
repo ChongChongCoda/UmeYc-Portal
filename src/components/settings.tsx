@@ -24,6 +24,24 @@ import {
 } from '../lib/updates';
 import { useGlobalState } from '../hooks/global-state';
 
+const withTimeout = async <T,>(
+  promise: Promise<T>,
+  ms: number,
+  onTimeout: () => T,
+): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(onTimeout()), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+};
+
 export const Settings = () => {
   const [
     { viewMode, url, sidebarVideoSpace, rightStickFullscreen, pageTitle, pageTitleUrl },
@@ -59,7 +77,15 @@ export const Settings = () => {
       clearTimeout(autoTimerRef.current);
       autoTimerRef.current = null;
     }
-    if (updatingRef.current) return;
+    if (updatingRef.current) {
+      if (manual) {
+        toaster.toast({
+          title: '正在检查更新',
+          body: '检查完成后会提示结果，请稍候。',
+        });
+      }
+      return;
+    }
     updatingRef.current = true;
     if (mountedRef.current) setUpdating(true);
     if (manual) {
@@ -69,7 +95,10 @@ export const Settings = () => {
       });
     }
     try {
-      const result = await checkPluginUpdate();
+      const result = await withTimeout(checkPluginUpdate(), 110000, () => ({
+        status: 'error' as const,
+        message: '检查更新超时，请检查 Deck 网络后重试',
+      }));
       if (!mountedRef.current) return;
       if (result.status === 'error') {
         const message = result.message || '未知错误';
