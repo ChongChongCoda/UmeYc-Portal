@@ -194,19 +194,28 @@ const SteamKeyboardSearch = ({
           top: 8,
           transform: 'translateX(-50%)',
           width: '92%',
-          maxWidth: 600,
+          maxWidth: 520,
           boxSizing: 'border-box',
-          padding: '10px 14px',
+          padding: '10px 12px',
           border: '1px solid #36404d',
           borderRadius: 10,
-          background: 'rgba(16, 23, 32, 0.92)',
+          background: '#101720',
+          boxShadow: '0 4px 18px rgba(0, 0, 0, 0.45)',
           color: '#fff',
           font: '14px sans-serif',
           pointerEvents: 'auto',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: 8,
+            width: '100%',
+          }}
+        >
+          <div style={{ flex: '1 1 0', minWidth: 0, maxWidth: '100%' }}>
             <div style={{ opacity: 0.65, fontSize: 12 }}>地图搜索</div>
             <div
               style={{
@@ -214,12 +223,14 @@ const SteamKeyboardSearch = ({
                 fontSize: 18,
                 fontWeight: 600,
                 wordBreak: 'break-word',
+                whiteSpace: 'normal',
               }}
             >
               {text || '请使用屏幕键盘输入关键词'}
             </div>
           </div>
-          <DialogButton
+          <button
+            type="button"
             aria-label="取消搜索"
             onClick={() => {
               try {
@@ -229,10 +240,21 @@ const SteamKeyboardSearch = ({
               }
               setKeyboardOpen(false);
             }}
-            style={{ minWidth: 64, flexShrink: 0 }}
+            style={{
+              flex: '0 0 72px',
+              width: 72,
+              height: 34,
+              padding: 0,
+              border: 0,
+              borderRadius: 6,
+              background: '#435268',
+              color: '#fff',
+              font: '14px sans-serif',
+              alignSelf: 'flex-start',
+            }}
           >
             取消
-          </DialogButton>
+          </button>
         </div>
         <div style={{ opacity: 0.65, fontSize: 12, marginTop: 4 }}>
           输入完成后按键盘上的「搜索」；收起键盘可返回。

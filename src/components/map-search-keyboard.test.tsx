@@ -107,6 +107,8 @@ describe('map search with the Steam keyboard', () => {
 
     act(() => lastOptions().onTextEntered('钥匙'));
     expect(screen.getByText('钥匙')).toBeInTheDocument();
+    const cancel = screen.getByRole('button', { name: '取消搜索' });
+    expect(cancel).toHaveStyle({ width: '72px' });
   });
 
   it('submits committed candidate text when the keyboard search key is pressed', async () => {
