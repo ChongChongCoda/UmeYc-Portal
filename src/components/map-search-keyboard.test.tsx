@@ -13,7 +13,6 @@ import {
 const mocks = vi.hoisted(() => {
   const ref = {
     ShowVirtualKeyboard: vi.fn(),
-    ShowModalKeyboard: vi.fn(),
     SetAsCurrentVirtualKeyboardTarget: vi.fn(),
     HideVirtualKeyboard: vi.fn(),
     BIsActive: vi.fn(() => true),
@@ -102,7 +101,7 @@ describe('map search with the Steam keyboard', () => {
   it('opens the Steam keyboard and shows committed IME text in a top strip', () => {
     render(<MapSearchModal closeModal={vi.fn()} />);
     expect(mocks.ref.SetAsCurrentVirtualKeyboardTarget).toHaveBeenCalledOnce();
-    expect(mocks.ref.ShowModalKeyboard).toHaveBeenCalledOnce();
+    expect(mocks.ref.ShowVirtualKeyboard).toHaveBeenCalledOnce();
     expect(lastOptions().strEnterKeyLabel).toBe('搜索');
     expect(screen.getByText('请使用屏幕键盘输入关键词')).toBeInTheDocument();
 
@@ -176,7 +175,7 @@ describe('map search with the Steam keyboard', () => {
     );
     mocks.ref.BIsActive.mockReturnValue(true);
     act(() => fireEvent.click(screen.getByRole('button', { name: '继续输入' })));
-    await waitFor(() => expect(mocks.ref.ShowModalKeyboard).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.ref.ShowVirtualKeyboard).toHaveBeenCalledTimes(2));
   });
 
   it('switches to the phone form when Steam keyboard input is unusable', async () => {

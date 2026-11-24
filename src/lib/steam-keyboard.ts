@@ -37,27 +37,36 @@ type WindowStoreWithKeyboard = {
   SteamUIWindows?: WindowWithKeyboard[];
 };
 
-const findManager = (store?: WindowStoreWithKeyboard) => {
-  const candidates = [
-    store?.GamepadUIMainWindowInstance,
-    ...(store?.SteamUIWindows ?? []),
-  ];
-  for (const candidate of candidates) {
-    const manager = candidate?.VirtualKeyboardManager;
-    if (manager && typeof manager.CreateVirtualKeyboardRef === 'function') return manager;
-  }
-  return undefined;
+type SteamUIHost = {
+  GetFocusedWindowInstance?(): WindowWithKeyboard | null | undefined;
+  WindowStore?: WindowStoreWithKeyboard;
+};
+
+const managerOf = (candidate?: WindowWithKeyboard | null) => {
+  const manager = candidate?.VirtualKeyboardManager;
+  return manager && typeof manager.CreateVirtualKeyboardRef === 'function' ? manager : undefined;
 };
 
 export const getVirtualKeyboardManager = (): SteamVirtualKeyboardManager | undefined => {
   try {
-    const host = window as unknown as {
-      SteamUIStore?: { WindowStore?: WindowStoreWithKeyboard };
-    };
-    return (
-      findManager(Router?.WindowStore as WindowStoreWithKeyboard | undefined) ??
-      findManager(host.SteamUIStore?.WindowStore)
-    );
+    const host = (window as unknown as { SteamUIStore?: SteamUIHost }).SteamUIStore;
+    const store = host?.WindowStore;
+    const routerStore = Router?.WindowStore as WindowStoreWithKeyboard | undefined;
+    // Mirror Steam's own `isVirtualKeyboardShowing` lookup: the QAM's focused
+    // window owns the live keyboard. Falling back to an unrelated hidden
+    // window produces a keyboard that never becomes visible.
+    const candidates: (WindowWithKeyboard | null | undefined)[] = [
+      host?.GetFocusedWindowInstance?.(),
+      store?.GamepadUIMainWindowInstance,
+      routerStore?.GamepadUIMainWindowInstance,
+      ...(store?.SteamUIWindows ?? []),
+      ...(routerStore?.SteamUIWindows ?? []),
+    ];
+    for (const candidate of candidates) {
+      const manager = managerOf(candidate);
+      if (manager) return manager;
+    }
+    return undefined;
   } catch {
     return undefined;
   }

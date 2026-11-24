@@ -128,9 +128,33 @@ const SteamKeyboardSearch = ({
       });
       vkRef.current = ref;
       ref.SetAsCurrentVirtualKeyboardTarget();
-      ref.ShowModalKeyboard();
+      // Use the same non-modal keyboard that Steam's own text fields open.
+      // The modal variant can render while staying invisible/black in the QAM.
+      ref.ShowVirtualKeyboard();
       setError('');
       setKeyboardOpen(true);
+      const verify = setTimeout(() => {
+        try {
+          if (ref?.BIsActive && !ref.BIsActive()) {
+            setKeyboardOpen(false);
+            setError(
+              'Steam 键盘没有成功打开。请点「继续输入」重试，或改用手机扫码输入。',
+            );
+          }
+        } catch {
+          // Treat a manager that cannot answer as a failed open.
+          setKeyboardOpen(false);
+          setError('Steam 键盘没有成功打开，请改用手机扫码输入。');
+        }
+      }, 900);
+      return () => {
+        clearTimeout(verify);
+        try {
+          ref?.HideVirtualKeyboard();
+        } catch {
+          // The keyboard may already have been dismissed by the user.
+        }
+      };
     } catch (cause) {
       setError(`无法打开 Steam 键盘：${String(cause)}`);
     }
@@ -181,16 +205,34 @@ const SteamKeyboardSearch = ({
           pointerEvents: 'auto',
         }}
       >
-        <div style={{ opacity: 0.65, fontSize: 12 }}>地图搜索</div>
-        <div
-          style={{
-            minHeight: 26,
-            fontSize: 18,
-            fontWeight: 600,
-            wordBreak: 'break-word',
-          }}
-        >
-          {text || '请使用屏幕键盘输入关键词'}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ opacity: 0.65, fontSize: 12 }}>地图搜索</div>
+            <div
+              style={{
+                minHeight: 26,
+                fontSize: 18,
+                fontWeight: 600,
+                wordBreak: 'break-word',
+              }}
+            >
+              {text || '请使用屏幕键盘输入关键词'}
+            </div>
+          </div>
+          <DialogButton
+            aria-label="取消搜索"
+            onClick={() => {
+              try {
+                vkRef.current?.HideVirtualKeyboard();
+              } catch {
+                // The keyboard may already be gone.
+              }
+              setKeyboardOpen(false);
+            }}
+            style={{ minWidth: 64, flexShrink: 0 }}
+          >
+            取消
+          </DialogButton>
         </div>
         <div style={{ opacity: 0.65, fontSize: 12, marginTop: 4 }}>
           输入完成后按键盘上的「搜索」；收起键盘可返回。
@@ -245,7 +287,7 @@ const SteamKeyboardSearch = ({
 };
 
 /** Fallback for runtimes where Steam's keyboard manager is unavailable. */
-const PhoneSearchModal = ({ closeModal }: ModalRootProps) => {
+const PhoneSearchModal = ({ closeModal, hint }: ModalRootProps & { hint?: string }) => {
   const [{ url }, setGlobalState] = useGlobalState();
   const [attempt, setAttempt] = useState(0);
   const [session, setSession] = useState<UrlInputSession | null>(null);
@@ -337,6 +379,9 @@ const PhoneSearchModal = ({ closeModal }: ModalRootProps) => {
       closeModal={closeModal}
     >
       <div style={{ textAlign: 'center', fontSize: 13 }}>
+        {hint && (
+          <div style={{ opacity: 0.7, fontSize: 12, marginBottom: 6 }}>{hint}</div>
+        )}
         <div>用手机扫描二维码，在手机上输入搜索内容；发送后会自动写入当前地图或物品页。</div>
         {session && <QrCode value={session.url} />}
         {!session && !error && <p role="status">正在生成二维码…</p>}
@@ -370,7 +415,12 @@ export const MapSearchModal = (props: ModalRootProps) => {
       />
     );
   }
-  return <PhoneSearchModal {...props} />;
+  return (
+    <PhoneSearchModal
+      {...props}
+      hint={manager ? undefined : '未找到 Steam 键盘管理器，已改用手机输入。'}
+    />
+  );
 };
 
 export const MapSearchModalWithState = modalWithState(MapSearchModal);
